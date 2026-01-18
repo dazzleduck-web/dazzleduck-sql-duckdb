@@ -1,0 +1,92 @@
+# name: test/sql/read_arrow_dd_integration.test_slow
+# description: Integration test for read_arrow_dd with dazzleduck server
+# group: [sql]
+#
+# This test requires a running dazzleduck server:
+#   docker run -ti -p 59307:59307 -p 8081:8081 dazzleduck/dazzleduck:latest --conf warehouse=/data
+#
+# Run this test with: ./build/release/test/unittest --test-dir . "*read_arrow_dd_integration*"
+
+require dazzle_duck
+
+# Test basic SQL query - SELECT literal values
+query III
+SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 1 as a, 2 as b, 3 as c');
+----
+1	2	3
+
+# Test SQL query with multiple rows
+query II
+SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1, ''hello''), (2, ''world''), (3, ''test'')) AS t(id, name)');
+----
+1	hello
+2	world
+3	test
+
+# Test SQL query with different data types
+query IIII
+SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 42 as int_col, 3.14 as double_col, ''text'' as string_col, true as bool_col');
+----
+42	3.14	text	true
+
+# Test projection pushdown - only select specific columns
+query I
+SELECT a FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 1 as a, 2 as b, 3 as c');
+----
+1
+
+query I
+SELECT c FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 1 as a, 2 as b, 3 as c');
+----
+3
+
+# Test filter pushdown
+query II
+SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1, ''a''), (2, ''b''), (3, ''c'')) AS t(id, name)') WHERE id > 1;
+----
+2	b
+3	c
+
+query II
+SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1, ''a''), (2, ''b''), (3, ''c'')) AS t(id, name)') WHERE id = 2;
+----
+2	b
+
+# Test combined projection and filter pushdown
+query I
+SELECT name FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1, ''a''), (2, ''b''), (3, ''c'')) AS t(id, name)') WHERE id >= 2;
+----
+b
+c
+
+# Test with NULL values
+query II
+SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1, ''a''), (2, NULL), (3, ''c'')) AS t(id, name)');
+----
+1	a
+2	NULL
+3	c
+
+# Test IS NULL filter
+query II
+SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1, ''a''), (2, NULL), (3, ''c'')) AS t(id, name)') WHERE name IS NULL;
+----
+2	NULL
+
+# Test IS NOT NULL filter
+query II
+SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1, ''a''), (2, NULL), (3, ''c'')) AS t(id, name)') WHERE name IS NOT NULL;
+----
+1	a
+3	c
+
+# Test aggregation on remote data
+query I
+SELECT SUM(id) FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1), (2), (3), (4), (5)) AS t(id)');
+----
+15
+
+query I
+SELECT COUNT(*) FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1), (2), (3)) AS t(id)');
+----
+3

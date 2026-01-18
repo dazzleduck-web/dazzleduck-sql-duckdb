@@ -1,0 +1,24 @@
+# name: test/sql/read_arrow_dd.test
+# description: test read_arrow_dd table function
+# group: [sql]
+
+# Require statement will ensure this test is run with this extension loaded
+require dazzle_duck
+
+# Test error: missing both source_table and sql parameters
+statement error
+SELECT * FROM read_arrow_dd('http://localhost:8081');
+----
+read_arrow_dd requires either 'source_table' or 'sql' parameter
+
+# Test error: providing both source_table and sql parameters
+statement error
+SELECT * FROM read_arrow_dd('http://localhost:8081', source_table := 'test', sql := 'SELECT 1');
+----
+read_arrow_dd accepts either 'source_table' or 'sql' parameter, not both
+
+# Test error: invalid named parameter
+statement error
+SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 1', invalid_param := 'test');
+----
+Invalid named parameter "invalid_param" for function read_arrow_dd
