@@ -30,14 +30,20 @@ SELECT * FROM read_arrow_dd('http://localhost:8081', source_table := 'mydb.schem
 SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM orders')
 WHERE status = 'pending' AND amount > 100;
 
--- With projection (handled locally by DuckDB)
+-- With limit pushdown (include LIMIT in the SQL query)
+SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM orders LIMIT 100');
+
+-- With projection pushdown (only selected columns are fetched from server)
 SELECT name, email FROM read_arrow_dd('http://localhost:8081', source_table := 'users');
+
+-- Projection with expressions (column 'a' is fetched, 'a+1' computed locally)
+SELECT a, a+1 FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM numbers');
 ```
 
 Parameters:
 - `url` (required): The base URL of the server
 - `source_table`: Table identifier passed directly to the server
-- `sql`: SQL query to execute on the server
+- `sql`: SQL query to execute on the server (can include LIMIT for limit pushdown)
 
 Note: You must provide either `source_table` or `sql`, but not both.
 

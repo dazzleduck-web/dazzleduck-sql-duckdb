@@ -59,6 +59,42 @@ SELECT name FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM (V
 b
 c
 
+# Test projection with expression - only column 'a' should be fetched, 'a+1' computed locally
+query II
+SELECT a, a+1 FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 1 as a, 2 as b, 3 as c');
+----
+1	2
+
+# Test projection with multiple expressions from same column
+query III
+SELECT a, a*2, a+10 FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 5 as a, 100 as b');
+----
+5	10	15
+
+# Test projection selecting middle column only
+query I
+SELECT b FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 1 as a, 2 as b, 3 as c, 4 as d, 5 as e');
+----
+2
+
+# Test projection selecting non-contiguous columns
+query II
+SELECT a, e FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 1 as a, 2 as b, 3 as c, 4 as d, 5 as e');
+----
+1	5
+
+# Test projection in different order than source
+query II
+SELECT c, a FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 1 as a, 2 as b, 3 as c');
+----
+3	1
+
+# Test projection with alias
+query II
+SELECT a as first_col, c as last_col FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 1 as a, 2 as b, 3 as c');
+----
+1	3
+
 # Test with NULL values
 query II
 SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1, ''a''), (2, NULL), (3, ''c'')) AS t(id, name)');

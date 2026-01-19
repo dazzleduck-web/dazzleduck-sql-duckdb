@@ -75,10 +75,30 @@ struct ReadArrowDDFunction : ArrowTableFunction {
     }
   }
 
-  //! Build the pushdown query with filters (projection is handled locally by DuckDB)
-  static string BuildFilterPushdownQuery(const string& original_query,
-                                         const vector<string>& all_column_names,
-                                         optional_ptr<TableFilterSet> filters) {
+  //! Build the pushdown query with projections and filters
+  static string BuildPushdownQuery(const string& original_query,
+                                   const vector<string>& all_column_names,
+                                   const vector<column_t>& column_ids,
+                                   optional_ptr<TableFilterSet> filters) {
+    // Build SELECT clause from projected columns
+    // The column_ids are in the order DuckDB wants them, so we build the SELECT list in that order
+    string select_clause;
+    for (idx_t i = 0; i < column_ids.size(); i++) {
+      auto col_idx = column_ids[i];
+      if (col_idx == COLUMN_IDENTIFIER_ROW_ID) {
+        continue;  // Skip row ID column
+      }
+      if (!select_clause.empty()) {
+        select_clause += ", ";
+      }
+      select_clause += "\"" + all_column_names[col_idx] + "\"";
+    }
+
+    // If no columns selected (shouldn't happen), fall back to SELECT *
+    if (select_clause.empty()) {
+      select_clause = "*";
+    }
+
     // Build WHERE clause from filters
     string where_clause;
     if (filters) {
@@ -104,10 +124,8 @@ struct ReadArrowDDFunction : ArrowTableFunction {
       }
     }
 
-    // Construct final query: SELECT * FROM (<original>) AS _subq WHERE <filters>
-    // Note: We always select all columns (*) and let DuckDB handle projection locally.
-    // This avoids schema mismatch issues between the server response and DuckDB's expectations.
-    return "SELECT * FROM (" + original_query + ") AS _subq" + where_clause;
+    // Construct final query: SELECT <columns> FROM (<original>) AS _subq WHERE <filters>
+    return "SELECT " + select_clause + " FROM (" + original_query + ") AS _subq" + where_clause;
   }
 
   static unique_ptr<FunctionData> Bind(ClientContext& context,
@@ -188,16 +206,14 @@ struct ReadArrowDDFunction : ArrowTableFunction {
                                                          TableFunctionInitInput& input) {
     auto& data = input.bind_data->Cast<ReadArrowDDFunctionData>();
 
-    // Check if we have filters to push down to the server
-    // Note: We only push down filters, not projections. Projection pushdown would change
-    // the schema returned by the server, causing a mismatch with DuckDB's column_ids.
-    // DuckDB will handle projection locally after we return all columns.
+    // Check if we have projections or filters to push down to the server
+    bool has_projection = input.column_ids.size() < data.column_names.size();
     bool has_filters = input.filters && !input.filters->filters.empty();
 
-    if (has_filters) {
-      // Build the pushdown query with filters only
+    if (has_projection || has_filters) {
+      // Build the pushdown query with projections and/or filters
       string pushdown_query =
-          BuildFilterPushdownQuery(data.original_query, data.column_names, input.filters);
+          BuildPushdownQuery(data.original_query, data.column_names, input.column_ids, input.filters);
 
       // Re-create the stream factory with the pushdown query
       auto new_factory =
