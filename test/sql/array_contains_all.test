@@ -1,0 +1,121 @@
+# name: test/sql/array_contains_all.test
+# description: test array_contains_all scalar function
+# group: [sql]
+
+require dazzle_duck
+
+# Test basic case - all elements exist
+query I
+SELECT array_contains_all(['a', 'b', 'c', 'd', 'e'], ['a', 'b', 'c']);
+----
+true
+
+# Test basic case - not all elements exist
+query I
+SELECT array_contains_all(['a', 'b', 'c'], ['a', 'x']);
+----
+false
+
+# Test with empty needle array - should return true
+query I
+SELECT array_contains_all(['a', 'b', 'c'], []);
+----
+true
+
+# Test with empty haystack but non-empty needle - should return false
+query I
+SELECT array_contains_all([], ['a', 'b']);
+----
+false
+
+# Test with both empty arrays - should return true
+query I
+SELECT array_contains_all([], []);
+----
+true
+
+# Test with single element found
+query I
+SELECT array_contains_all(['apple', 'banana', 'cherry'], ['banana']);
+----
+true
+
+# Test with single element not found
+query I
+SELECT array_contains_all(['apple', 'banana', 'cherry'], ['orange']);
+----
+false
+
+# Test with duplicate elements in needle
+query I
+SELECT array_contains_all(['a', 'b', 'c'], ['a', 'a', 'b']);
+----
+true
+
+# Test with NULL haystack
+query I
+SELECT array_contains_all(NULL, ['a', 'b']);
+----
+NULL
+
+# Test with NULL needle
+query I
+SELECT array_contains_all(['a', 'b', 'c'], NULL);
+----
+NULL
+
+# Test with column references
+query I
+SELECT array_contains_all(arr, ['a', 'b']) FROM (VALUES (['a', 'b', 'c']), (['a', 'x', 'y']), (['b', 'c', 'd'])) AS t(arr);
+----
+true
+false
+false
+
+# Test exact match
+query I
+SELECT array_contains_all(['x', 'y', 'z'], ['x', 'y', 'z']);
+----
+true
+
+# Test superset
+query I
+SELECT array_contains_all(['a', 'b', 'c', 'd', 'e'], ['a', 'c', 'e']);
+----
+true
+
+# Test case sensitivity
+query I
+SELECT array_contains_all(['Apple', 'Banana'], ['apple']);
+----
+false
+
+# Test with spaces in strings
+query I
+SELECT array_contains_all(['hello world', 'foo bar'], ['hello world']);
+----
+true
+
+# Test explicit columnar mode (true)
+query I
+SELECT array_contains_all(['a', 'b', 'c'], ['a', 'b'], true);
+----
+true
+
+# Test explicit row-based mode (false)
+query I
+SELECT array_contains_all(['a', 'b', 'c'], ['a', 'b'], false);
+----
+true
+
+# Test columnar mode with not found
+query I
+SELECT array_contains_all(['a', 'b', 'c'], ['a', 'x'], true);
+----
+false
+
+# Test row-based mode with not found
+query I
+SELECT array_contains_all(['a', 'b', 'c'], ['a', 'x'], false);
+----
+false

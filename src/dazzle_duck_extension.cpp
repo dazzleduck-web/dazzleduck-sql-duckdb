@@ -7,6 +7,7 @@
 
 #include "nanoarrow/nanoarrow.hpp"
 
+#include "scalar_function/array_contains_all.hpp"
 #include "scalar_function/dd_login.hpp"
 #include "scalar_function/dd_search.hpp"
 #include "table_function/dd_splits.hpp"
@@ -30,6 +31,7 @@ struct NanoarrowVersion {
 
 void LoadInternal(ExtensionLoader& loader) {
   NanoarrowVersion::Register(loader);
+  ext_nanoarrow::RegisterArrayContainsAll(loader);
   ext_nanoarrow::RegisterDDLogin(loader);
   ext_nanoarrow::RegisterDDSearch(loader);
   ext_nanoarrow::RegisterDDSplits(loader);
