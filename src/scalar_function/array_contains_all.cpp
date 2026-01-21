@@ -1,6 +1,7 @@
 #include "scalar_function/array_contains_all.hpp"
 
 #include "duckdb/common/operator/comparison_operators.hpp"
+#include "duckdb/common/types/hash.hpp"
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
@@ -9,6 +10,35 @@ namespace duckdb {
 namespace ext_nanoarrow {
 
 namespace {
+
+//! Bloom filter header - must match the one in bloom_filter.cpp
+struct BloomFilterHeader {
+	uint32_t magic;
+	uint32_t num_bits;
+	uint32_t num_hash_funcs;
+	uint32_t reserved;
+};
+
+static constexpr uint32_t BLOOM_FILTER_MAGIC = 0x424C4F4D;  // "BLOM"
+
+//! Check if a bit is set in the bloom filter
+static inline bool GetBit(const uint8_t* data, uint32_t bit_pos) {
+	return (data[bit_pos / 8] & (1 << (bit_pos % 8))) != 0;
+}
+
+//! Check if a value may be in the bloom filter
+static bool BloomFilterMayContain(const uint8_t* bf_data, uint32_t num_bits, uint32_t num_hash_funcs,
+                                   const string_t& value) {
+	hash_t base_hash = Hash(value.GetData(), value.GetSize());
+	for (uint32_t i = 0; i < num_hash_funcs; i++) {
+		hash_t h = base_hash + i * (base_hash >> 16) + i * i;
+		uint32_t bit_pos = static_cast<uint32_t>(h % num_bits);
+		if (!GetBit(bf_data, bit_pos)) {
+			return false;  // Definitely not present
+		}
+	}
+	return true;  // May be present
+}
 
 //! Row-based implementation: for each row, check all needle elements against haystack
 static void ArrayContainsAllRowBased(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -270,6 +300,131 @@ static void ArrayContainsAllFunction(DataChunk& args, ExpressionState& state, Ve
 	}
 }
 
+//! Bloom filter optimized implementation
+//! Uses a pre-computed bloom filter to quickly reject needles that definitely don't exist
+static void ArrayContainsAllWithBloomFilter(DataChunk& args, ExpressionState& state, Vector& result) {
+	auto count = args.size();
+	auto& haystack_vec = args.data[0];
+	auto& needle_vec = args.data[1];
+	auto& bloom_vec = args.data[2];
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto& result_validity = FlatVector::Validity(result);
+
+	UnifiedVectorFormat haystack_format;
+	UnifiedVectorFormat needle_format;
+	UnifiedVectorFormat bloom_format;
+	haystack_vec.ToUnifiedFormat(count, haystack_format);
+	needle_vec.ToUnifiedFormat(count, needle_format);
+	bloom_vec.ToUnifiedFormat(count, bloom_format);
+
+	auto haystack_list_entries = UnifiedVectorFormat::GetData<list_entry_t>(haystack_format);
+	auto needle_list_entries = UnifiedVectorFormat::GetData<list_entry_t>(needle_format);
+	auto bloom_data = UnifiedVectorFormat::GetData<string_t>(bloom_format);
+
+	auto& haystack_child = ListVector::GetEntry(haystack_vec);
+	auto& needle_child = ListVector::GetEntry(needle_vec);
+
+	auto haystack_child_size = ListVector::GetListSize(haystack_vec);
+	auto needle_child_size = ListVector::GetListSize(needle_vec);
+
+	UnifiedVectorFormat haystack_child_format;
+	UnifiedVectorFormat needle_child_format;
+	haystack_child.ToUnifiedFormat(haystack_child_size, haystack_child_format);
+	needle_child.ToUnifiedFormat(needle_child_size, needle_child_format);
+
+	auto haystack_child_data = UnifiedVectorFormat::GetData<string_t>(haystack_child_format);
+	auto needle_child_data = UnifiedVectorFormat::GetData<string_t>(needle_child_format);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto haystack_idx = haystack_format.sel->get_index(i);
+		auto needle_idx = needle_format.sel->get_index(i);
+		auto bloom_idx = bloom_format.sel->get_index(i);
+
+		// Check for NULL inputs
+		if (!haystack_format.validity.RowIsValid(haystack_idx) ||
+		    !needle_format.validity.RowIsValid(needle_idx) ||
+		    !bloom_format.validity.RowIsValid(bloom_idx)) {
+			result_validity.SetInvalid(i);
+			continue;
+		}
+
+		auto& haystack_entry = haystack_list_entries[haystack_idx];
+		auto& needle_entry = needle_list_entries[needle_idx];
+		const string_t& bloom_blob = bloom_data[bloom_idx];
+
+		// Empty needle - always true
+		if (needle_entry.length == 0) {
+			result_data[i] = true;
+			continue;
+		}
+
+		// Empty haystack with non-empty needle - always false
+		if (haystack_entry.length == 0) {
+			result_data[i] = false;
+			continue;
+		}
+
+		// Validate bloom filter
+		if (bloom_blob.GetSize() < sizeof(BloomFilterHeader)) {
+			result_validity.SetInvalid(i);
+			continue;
+		}
+
+		const auto* header = reinterpret_cast<const BloomFilterHeader*>(bloom_blob.GetData());
+		if (header->magic != BLOOM_FILTER_MAGIC) {
+			result_validity.SetInvalid(i);
+			continue;
+		}
+
+		uint32_t expected_size = sizeof(BloomFilterHeader) + (header->num_bits + 7) / 8;
+		if (bloom_blob.GetSize() < expected_size) {
+			result_validity.SetInvalid(i);
+			continue;
+		}
+
+		const uint8_t* bf_data = reinterpret_cast<const uint8_t*>(bloom_blob.GetData() + sizeof(BloomFilterHeader));
+
+		bool all_found = true;
+		for (idx_t j = 0; j < needle_entry.length && all_found; j++) {
+			idx_t needle_child_idx = needle_child_format.sel->get_index(needle_entry.offset + j);
+
+			if (!needle_child_format.validity.RowIsValid(needle_child_idx)) {
+				continue;  // Skip NULL values in needle
+			}
+
+			const string_t& needle_str = needle_child_data[needle_child_idx];
+
+			// Quick bloom filter check first
+			if (!BloomFilterMayContain(bf_data, header->num_bits, header->num_hash_funcs, needle_str)) {
+				// Bloom filter says definitely not present - no need to search
+				all_found = false;
+				break;
+			}
+
+			// Bloom filter says "may be present" - need to verify with linear search
+			bool found = false;
+			for (idx_t k = 0; k < haystack_entry.length; k++) {
+				idx_t haystack_child_idx = haystack_child_format.sel->get_index(haystack_entry.offset + k);
+				if (!haystack_child_format.validity.RowIsValid(haystack_child_idx)) {
+					continue;
+				}
+				if (Equals::Operation(haystack_child_data[haystack_child_idx], needle_str)) {
+					found = true;
+					break;
+				}
+			}
+
+			if (!found) {
+				all_found = false;
+			}
+		}
+
+		result_data[i] = all_found;
+	}
+}
+
 }  // namespace
 
 void RegisterArrayContainsAll(ExtensionLoader& loader) {
@@ -290,7 +445,7 @@ void RegisterArrayContainsAll(ExtensionLoader& loader) {
 	func2.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
 	loader.RegisterFunction(func2);
 
-	// 3-argument version with explicit flag
+	// 3-argument version with explicit flag (BOOLEAN)
 	auto func3 = ScalarFunction(
 		"array_contains_all",
 		{LogicalType::LIST(LogicalType::VARCHAR), LogicalType::LIST(LogicalType::VARCHAR), LogicalType::BOOLEAN},
@@ -299,6 +454,18 @@ void RegisterArrayContainsAll(ExtensionLoader& loader) {
 	);
 	func3.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
 	loader.RegisterFunction(func3);
+
+	// 3-argument version with bloom filter (BLOB)
+	// The bloom filter should be created from the haystack using bloom_filter_create()
+	// This allows pre-computing the bloom filter once and reusing it for multiple checks
+	auto func_bloom = ScalarFunction(
+		"array_contains_all",
+		{LogicalType::LIST(LogicalType::VARCHAR), LogicalType::LIST(LogicalType::VARCHAR), LogicalType::BLOB},
+		LogicalType::BOOLEAN,
+		ArrayContainsAllWithBloomFilter
+	);
+	func_bloom.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	loader.RegisterFunction(func_bloom);
 }
 
 }  // namespace ext_nanoarrow

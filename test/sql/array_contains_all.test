@@ -119,3 +119,55 @@ query I
 SELECT array_contains_all(['a', 'b', 'c'], ['a', 'x'], false);
 ----
 false
+
+# Test with bloom filter - all elements exist
+query I
+SELECT array_contains_all(['a', 'b', 'c', 'd', 'e'], ['a', 'b'], bloom_filter_create(['a', 'b', 'c', 'd', 'e']));
+----
+true
+
+# Test with bloom filter - not all elements exist
+query I
+SELECT array_contains_all(['a', 'b', 'c'], ['a', 'x'], bloom_filter_create(['a', 'b', 'c']));
+----
+false
+
+# Test with bloom filter - empty needle
+query I
+SELECT array_contains_all(['a', 'b', 'c'], [], bloom_filter_create(['a', 'b', 'c']));
+----
+true
+
+# Test with bloom filter - empty haystack
+query I
+SELECT array_contains_all([], ['a'], bloom_filter_create([]));
+----
+false
+
+# Test with bloom filter - column reference
+query I
+SELECT array_contains_all(arr, ['a', 'b'], bloom_filter_create(arr)) FROM (VALUES (['a', 'b', 'c']), (['a', 'x', 'y']), (['b', 'c', 'd'])) AS t(arr);
+----
+true
+false
+false
+
+# Test with pre-computed bloom filter
+query I
+WITH data AS (
+    SELECT ['apple', 'banana', 'cherry', 'date'] as haystack,
+           bloom_filter_create(['apple', 'banana', 'cherry', 'date']) as bf
+)
+SELECT array_contains_all(haystack, ['apple', 'cherry'], bf) FROM data;
+----
+true
+
+# Test with pre-computed bloom filter - not found
+query I
+WITH data AS (
+    SELECT ['apple', 'banana', 'cherry', 'date'] as haystack,
+           bloom_filter_create(['apple', 'banana', 'cherry', 'date']) as bf
+)
+SELECT array_contains_all(haystack, ['apple', 'orange'], bf) FROM data;
+----
+false
