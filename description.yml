@@ -10,7 +10,7 @@ extension:
 
 repo:
   github: dazzleduck-web/dazzleduck-sql-duckdb
-  ref: 5d0d0cc1a9ec4a53f1e6961a2b725f9779d39566
+  ref: v0.0.1
 
 docs:
   hello_world: |
