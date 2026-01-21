@@ -3,6 +3,7 @@ include(FetchContent)
 
 # Set extension name here
 set(TARGET_NAME dazzle_duck)
+set(EXTENSION_VERSION "0.0.1")
 
 set(NANOARROW_IPC ON)
 set(NANOARROW_NAMESPACE "DuckDBExt${TARGET_NAME}")
@@ -41,6 +42,10 @@ build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 target_link_libraries(${EXTENSION_NAME} nanoarrow::nanoarrow nanoarrow::nanoarrow_ipc)
 target_link_libraries(${LOADABLE_EXTENSION_NAME} nanoarrow::nanoarrow
                       nanoarrow::nanoarrow_ipc)
+
+# Set extension version macro
+target_compile_definitions(${EXTENSION_NAME} PRIVATE EXT_VERSION_DAZZLE_DUCK="${EXTENSION_VERSION}")
+target_compile_definitions(${LOADABLE_EXTENSION_NAME} PRIVATE EXT_VERSION_DAZZLE_DUCK="${EXTENSION_VERSION}")
 
 install(TARGETS ${EXTENSION_NAME}
         EXPORT "${DUCKDB_EXPORT_SET}"

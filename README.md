@@ -11,6 +11,7 @@ This extension provides functionality to query remote Arrow IPC endpoints.
 - **bloom_filter_create**: Create bloom filter from string array
 - **bloom_filter_contains**: Check if value may exist in bloom filter
 - **bloom_filter_contains_all**: Check if all values may exist in bloom filter
+- **dazzle_duck_version**: Returns the extension version
 
 ## Installation
 

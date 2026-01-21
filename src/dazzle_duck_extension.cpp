@@ -18,20 +18,24 @@ namespace duckdb {
 
 namespace {
 
-struct NanoarrowVersion {
+struct DazzleDuckVersion {
   static void Register(ExtensionLoader& loader) {
-    auto fn = ScalarFunction("nanoarrow_version", {}, LogicalType::VARCHAR, ExecuteFn);
+    auto fn = ScalarFunction("dazzle_duck_version", {}, LogicalType::VARCHAR, ExecuteFn);
     loader.RegisterFunction(fn);
   }
 
   static void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
-    result.SetValue(0, StringVector::AddString(result, ArrowNanoarrowVersion()));
+#ifdef EXT_VERSION_DAZZLE_DUCK
+    result.SetValue(0, StringVector::AddString(result, EXT_VERSION_DAZZLE_DUCK));
+#else
+    result.SetValue(0, StringVector::AddString(result, "dev"));
+#endif
     result.SetVectorType(VectorType::CONSTANT_VECTOR);
   }
 };
 
 void LoadInternal(ExtensionLoader& loader) {
-  NanoarrowVersion::Register(loader);
+  DazzleDuckVersion::Register(loader);
   ext_nanoarrow::RegisterArrayContainsAll(loader);
   ext_nanoarrow::RegisterBloomFilterFunctions(loader);
   ext_nanoarrow::RegisterDDLogin(loader);

@@ -4,15 +4,15 @@
 
 # Before we load the extension, this will fail
 statement error
-SELECT nanoarrow_version();
+SELECT dazzle_duck_version();
 ----
-Catalog Error: Scalar Function with name nanoarrow_version does not exist!
+Catalog Error: Scalar Function with name dazzle_duck_version does not exist!
 
 # Require statement will ensure this test is run with this extension loaded
 require dazzle_duck
 
 # Confirm the extension works
 query I
-SELECT nanoarrow_version();
+SELECT length(dazzle_duck_version()) > 0;
 ----
-0.7.0-SNAPSHOT
+true

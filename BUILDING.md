@@ -123,7 +123,7 @@ make test
 When using the DuckDB CLI built from this repo, the extension is automatically loaded:
 
 ```sql
-SELECT nanoarrow_version();
+SELECT dazzle_duck_version();
 ```
 
 ### Dynamically Loaded
@@ -135,7 +135,7 @@ To load the extension into a standard DuckDB installation:
 LOAD '/path/to/dazzle_duck.duckdb_extension';
 
 -- Verify
-SELECT nanoarrow_version();
+SELECT dazzle_duck_version();
 ```
 
 ## Troubleshooting
@@ -176,4 +176,37 @@ cmake -DEXTENSION_STATIC_BUILD=1 \
       -DCMAKE_BUILD_TYPE=Release \
       -S ./duckdb/ -B build/release
 cmake --build build/release
+```
+
+## Versioning
+
+The extension version is managed in `version.txt` (single source of truth).
+
+### Updating the Version
+
+```bash
+# 1. Edit version.txt with new version
+echo "0.0.2" > version.txt
+
+# 2. Run the update script to sync CMakeLists.txt and description.yml
+./scripts/update_version.sh
+
+# 3. Commit and push
+git add -A
+git commit -m "Bump version to 0.0.2"
+git push
+```
+
+### Version Files
+
+| File | Purpose |
+|------|---------|
+| `version.txt` | Single source of truth |
+| `CMakeLists.txt` | Build-time version (synced by script) |
+| `description.yml` | Community extension version (synced by script) |
+
+### Check Current Version
+
+```sql
+SELECT dazzle_duck_version();
 ```
