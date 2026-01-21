@@ -7,6 +7,7 @@
 
 #include "nanoarrow/nanoarrow.hpp"
 
+#include "scalar_function/dd_search.hpp"
 #include "table_function/read_arrow_dd.hpp"
 
 namespace duckdb {
@@ -27,6 +28,7 @@ struct NanoarrowVersion {
 
 void LoadInternal(ExtensionLoader& loader) {
   NanoarrowVersion::Register(loader);
+  ext_nanoarrow::RegisterDDSearch(loader);
   ext_nanoarrow::RegisterReadArrowDD(loader);
 }
 

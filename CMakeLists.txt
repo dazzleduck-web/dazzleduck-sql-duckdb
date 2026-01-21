@@ -25,6 +25,7 @@ set(EXTENSION_SOURCES
     src/ipc/stream_factory.cpp
     src/ipc/stream_reader/base_stream_reader.cpp
     src/ipc/stream_reader/ipc_buffer_stream_reader.cpp
+    src/scalar_function/dd_search.cpp
     src/scanner/read_arrow_dd.cpp
     src/dazzle_duck_extension.cpp)
 

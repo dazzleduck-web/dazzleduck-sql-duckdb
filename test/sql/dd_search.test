@@ -1,0 +1,51 @@
+# name: test/sql/dd_search.test
+# description: test dd_search scalar function
+# group: [sql]
+
+require dazzle_duck
+
+# Test dd_search with integer column and integer list
+query I
+SELECT dd_search(1, [1, 2, 3]);
+----
+true
+
+# Test dd_search with string column and string list
+query I
+SELECT dd_search('hello', ['a', 'b', 'c']);
+----
+true
+
+# Test dd_search with column reference
+query I
+SELECT dd_search(x, [1, 2, 3]) FROM (VALUES (1), (2), (3)) AS t(x);
+----
+true
+true
+true
+
+# Test dd_search in WHERE clause
+query I
+SELECT x FROM (VALUES (1), (2), (3)) AS t(x) WHERE dd_search(x, [1, 2]);
+----
+1
+2
+3
+
+# Test dd_search with empty list
+query I
+SELECT dd_search(1, []);
+----
+true
+
+# Test dd_search with NULL value
+query I
+SELECT dd_search(NULL, [1, 2, 3]);
+----
+true
+
+# Test dd_search with mixed types in list (strings)
+query I
+SELECT dd_search('test', ['foo', 'bar', 'test']);
+----
+true
