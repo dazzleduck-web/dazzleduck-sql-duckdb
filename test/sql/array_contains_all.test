@@ -1,72 +1,72 @@
-# name: test/sql/array_contains_all.test
-# description: test array_contains_all scalar function
+# name: test/sql/dd_array_contains_all.test
+# description: test dd_array_contains_all scalar function
 # group: [sql]
 
 require dazzle_duck
 
 # Test basic case - all elements exist
 query I
-SELECT array_contains_all(['a', 'b', 'c', 'd', 'e'], ['a', 'b', 'c']);
+SELECT dd_array_contains_all(['a', 'b', 'c', 'd', 'e'], ['a', 'b', 'c']);
 ----
 true
 
 # Test basic case - not all elements exist
 query I
-SELECT array_contains_all(['a', 'b', 'c'], ['a', 'x']);
+SELECT dd_array_contains_all(['a', 'b', 'c'], ['a', 'x']);
 ----
 false
 
 # Test with empty needle array - should return true
 query I
-SELECT array_contains_all(['a', 'b', 'c'], []);
+SELECT dd_array_contains_all(['a', 'b', 'c'], []);
 ----
 true
 
 # Test with empty haystack but non-empty needle - should return false
 query I
-SELECT array_contains_all([], ['a', 'b']);
+SELECT dd_array_contains_all([], ['a', 'b']);
 ----
 false
 
 # Test with both empty arrays - should return true
 query I
-SELECT array_contains_all([], []);
+SELECT dd_array_contains_all([], []);
 ----
 true
 
 # Test with single element found
 query I
-SELECT array_contains_all(['apple', 'banana', 'cherry'], ['banana']);
+SELECT dd_array_contains_all(['apple', 'banana', 'cherry'], ['banana']);
 ----
 true
 
 # Test with single element not found
 query I
-SELECT array_contains_all(['apple', 'banana', 'cherry'], ['orange']);
+SELECT dd_array_contains_all(['apple', 'banana', 'cherry'], ['orange']);
 ----
 false
 
 # Test with duplicate elements in needle
 query I
-SELECT array_contains_all(['a', 'b', 'c'], ['a', 'a', 'b']);
+SELECT dd_array_contains_all(['a', 'b', 'c'], ['a', 'a', 'b']);
 ----
 true
 
 # Test with NULL haystack
 query I
-SELECT array_contains_all(NULL, ['a', 'b']);
+SELECT dd_array_contains_all(NULL, ['a', 'b']);
 ----
 NULL
 
 # Test with NULL needle
 query I
-SELECT array_contains_all(['a', 'b', 'c'], NULL);
+SELECT dd_array_contains_all(['a', 'b', 'c'], NULL);
 ----
 NULL
 
 # Test with column references
 query I
-SELECT array_contains_all(arr, ['a', 'b']) FROM (VALUES (['a', 'b', 'c']), (['a', 'x', 'y']), (['b', 'c', 'd'])) AS t(arr);
+SELECT dd_array_contains_all(arr, ['a', 'b']) FROM (VALUES (['a', 'b', 'c']), (['a', 'x', 'y']), (['b', 'c', 'd'])) AS t(arr);
 ----
 true
 false
@@ -74,79 +74,79 @@ false
 
 # Test exact match
 query I
-SELECT array_contains_all(['x', 'y', 'z'], ['x', 'y', 'z']);
+SELECT dd_array_contains_all(['x', 'y', 'z'], ['x', 'y', 'z']);
 ----
 true
 
 # Test superset
 query I
-SELECT array_contains_all(['a', 'b', 'c', 'd', 'e'], ['a', 'c', 'e']);
+SELECT dd_array_contains_all(['a', 'b', 'c', 'd', 'e'], ['a', 'c', 'e']);
 ----
 true
 
 # Test case sensitivity
 query I
-SELECT array_contains_all(['Apple', 'Banana'], ['apple']);
+SELECT dd_array_contains_all(['Apple', 'Banana'], ['apple']);
 ----
 false
 
 # Test with spaces in strings
 query I
-SELECT array_contains_all(['hello world', 'foo bar'], ['hello world']);
+SELECT dd_array_contains_all(['hello world', 'foo bar'], ['hello world']);
 ----
 true
 
 # Test explicit columnar mode (true)
 query I
-SELECT array_contains_all(['a', 'b', 'c'], ['a', 'b'], true);
+SELECT dd_array_contains_all(['a', 'b', 'c'], ['a', 'b'], true);
 ----
 true
 
 # Test explicit row-based mode (false)
 query I
-SELECT array_contains_all(['a', 'b', 'c'], ['a', 'b'], false);
+SELECT dd_array_contains_all(['a', 'b', 'c'], ['a', 'b'], false);
 ----
 true
 
 # Test columnar mode with not found
 query I
-SELECT array_contains_all(['a', 'b', 'c'], ['a', 'x'], true);
+SELECT dd_array_contains_all(['a', 'b', 'c'], ['a', 'x'], true);
 ----
 false
 
 # Test row-based mode with not found
 query I
-SELECT array_contains_all(['a', 'b', 'c'], ['a', 'x'], false);
+SELECT dd_array_contains_all(['a', 'b', 'c'], ['a', 'x'], false);
 ----
 false
 
 # Test with bloom filter - all elements exist
 query I
-SELECT array_contains_all(['a', 'b', 'c', 'd', 'e'], ['a', 'b'], bloom_filter_create(['a', 'b', 'c', 'd', 'e']));
+SELECT dd_array_contains_all(['a', 'b', 'c', 'd', 'e'], ['a', 'b'], dd_bloom_filter_create(['a', 'b', 'c', 'd', 'e']));
 ----
 true
 
 # Test with bloom filter - not all elements exist
 query I
-SELECT array_contains_all(['a', 'b', 'c'], ['a', 'x'], bloom_filter_create(['a', 'b', 'c']));
+SELECT dd_array_contains_all(['a', 'b', 'c'], ['a', 'x'], dd_bloom_filter_create(['a', 'b', 'c']));
 ----
 false
 
 # Test with bloom filter - empty needle
 query I
-SELECT array_contains_all(['a', 'b', 'c'], [], bloom_filter_create(['a', 'b', 'c']));
+SELECT dd_array_contains_all(['a', 'b', 'c'], [], dd_bloom_filter_create(['a', 'b', 'c']));
 ----
 true
 
 # Test with bloom filter - empty haystack
 query I
-SELECT array_contains_all([], ['a'], bloom_filter_create([]));
+SELECT dd_array_contains_all([], ['a'], dd_bloom_filter_create([]));
 ----
 false
 
 # Test with bloom filter - column reference
 query I
-SELECT array_contains_all(arr, ['a', 'b'], bloom_filter_create(arr)) FROM (VALUES (['a', 'b', 'c']), (['a', 'x', 'y']), (['b', 'c', 'd'])) AS t(arr);
+SELECT dd_array_contains_all(arr, ['a', 'b'], dd_bloom_filter_create(arr)) FROM (VALUES (['a', 'b', 'c']), (['a', 'x', 'y']), (['b', 'c', 'd'])) AS t(arr);
 ----
 true
 false
@@ -156,9 +156,9 @@ false
 query I
 WITH data AS (
     SELECT ['apple', 'banana', 'cherry', 'date'] as haystack,
-           bloom_filter_create(['apple', 'banana', 'cherry', 'date']) as bf
+           dd_bloom_filter_create(['apple', 'banana', 'cherry', 'date']) as bf
 )
-SELECT array_contains_all(haystack, ['apple', 'cherry'], bf) FROM data;
+SELECT dd_array_contains_all(haystack, ['apple', 'cherry'], bf) FROM data;
 ----
 true
 
@@ -166,8 +166,8 @@ true
 query I
 WITH data AS (
     SELECT ['apple', 'banana', 'cherry', 'date'] as haystack,
-           bloom_filter_create(['apple', 'banana', 'cherry', 'date']) as bf
+           dd_bloom_filter_create(['apple', 'banana', 'cherry', 'date']) as bf
 )
-SELECT array_contains_all(haystack, ['apple', 'orange'], bf) FROM data;
+SELECT dd_array_contains_all(haystack, ['apple', 'orange'], bf) FROM data;
 ----
 false

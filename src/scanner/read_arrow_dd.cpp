@@ -323,11 +323,11 @@ struct ReadArrowDDFunction : ArrowTableFunction {
     // Validate that exactly one of source_table or sql is provided
     if (source_table.empty() && sql_query.empty()) {
       throw InvalidInputException(
-          "read_arrow_dd requires either 'source_table' or 'sql' parameter");
+          "dd_read_arrow requires either 'source_table' or 'sql' parameter");
     }
     if (!source_table.empty() && !sql_query.empty()) {
       throw InvalidInputException(
-          "read_arrow_dd accepts either 'source_table' or 'sql' parameter, not both");
+          "dd_read_arrow accepts either 'source_table' or 'sql' parameter, not both");
     }
 
     // Construct the query
@@ -591,7 +591,7 @@ struct ReadArrowDDFunction : ArrowTableFunction {
 
   static TableFunction Function() {
     // Only url is required as positional parameter
-    TableFunction func("read_arrow_dd", {LogicalType::VARCHAR}, ScanFunction,
+    TableFunction func("dd_read_arrow", {LogicalType::VARCHAR}, ScanFunction,
                        Bind, InitGlobal, InitLocal);
 
     // Add named parameters

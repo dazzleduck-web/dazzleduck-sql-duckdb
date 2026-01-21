@@ -4,14 +4,14 @@ This extension provides functionality to query remote Arrow IPC endpoints.
 
 ## Features
 
-- **read_arrow_dd**: Query remote servers that return Arrow IPC streams with parallel execution support
+- **dd_read_arrow**: Query remote servers that return Arrow IPC streams with parallel execution support
 - **dd_login**: Authenticate with remote servers and obtain JWT tokens
 - **dd_splits**: Inspect execution plan splits for a query
-- **array_contains_all**: Check if all elements in needle array exist in haystack array
-- **bloom_filter_create**: Create bloom filter from string array
-- **bloom_filter_contains**: Check if value may exist in bloom filter
-- **bloom_filter_contains_all**: Check if all values may exist in bloom filter
-- **dazzle_duck_version**: Returns the extension version
+- **dd_array_contains_all**: Check if all elements in needle array exist in haystack array
+- **dd_bloom_filter_create**: Create bloom filter from string array
+- **dd_bloom_filter_contains**: Check if value may exist in bloom filter
+- **dd_bloom_filter_contains_all**: Check if all values may exist in bloom filter
+- **dd_version**: Returns the extension version
 
 ## Installation
 
@@ -44,24 +44,24 @@ Parameters:
 
 ### Querying Remote Arrow Endpoints
 
-The `read_arrow_dd` function queries remote servers that return Arrow IPC streams via HTTP.
+The `dd_read_arrow` function queries remote servers that return Arrow IPC streams via HTTP.
 
 ```sql
 -- Using SQL query parameter
-SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM users');
+SELECT * FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM users');
 
 -- Using source_table parameter (passed directly to server)
-SELECT * FROM read_arrow_dd('http://localhost:8081', source_table := 'mydb.schema.users');
+SELECT * FROM dd_read_arrow('http://localhost:8081', source_table := 'mydb.schema.users');
 
 -- With authentication
-SELECT * FROM read_arrow_dd(
+SELECT * FROM dd_read_arrow(
     'http://localhost:8082',
     source_table := 'demo_db.main.demo',
     auth_token := dd_login('http://localhost:8082', 'admin', 'admin', '{"database":"demo_db","schema":"main","table":"demo"}')
 );
 
 -- With parallel execution (split mode)
-SELECT * FROM read_arrow_dd(
+SELECT * FROM dd_read_arrow(
     'http://localhost:8082',
     source_table := 'demo_db.main.demo',
     split := true,
@@ -69,7 +69,7 @@ SELECT * FROM read_arrow_dd(
 );
 
 -- With split size hint (controls how splits are generated)
-SELECT * FROM read_arrow_dd(
+SELECT * FROM dd_read_arrow(
     'http://localhost:8082',
     source_table := 'demo_db.main.demo',
     split := true,
@@ -78,11 +78,11 @@ SELECT * FROM read_arrow_dd(
 );
 
 -- With filter pushdown (filters are sent to the server)
-SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT * FROM orders')
+SELECT * FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM orders')
 WHERE status = 'pending' AND amount > 100;
 
 -- With projection pushdown (only selected columns are fetched from server)
-SELECT name, email FROM read_arrow_dd('http://localhost:8081', source_table := 'users');
+SELECT name, email FROM dd_read_arrow('http://localhost:8081', source_table := 'users');
 ```
 
 Parameters:
@@ -143,17 +143,17 @@ Check if all elements in a needle array exist in a haystack array:
 
 ```sql
 -- Basic usage
-SELECT array_contains_all(['a', 'b', 'c', 'd'], ['a', 'c']);
+SELECT dd_array_contains_all(['a', 'b', 'c', 'd'], ['a', 'c']);
 -- Returns: true
 
-SELECT array_contains_all(['a', 'b', 'c'], ['a', 'x']);
+SELECT dd_array_contains_all(['a', 'b', 'c'], ['a', 'x']);
 -- Returns: false
 
 -- With pre-computed bloom filter for optimization
-SELECT array_contains_all(
+SELECT dd_array_contains_all(
     haystack,
     ['item_1', 'item_2'],
-    bloom_filter_create(haystack)
+    dd_bloom_filter_create(haystack)
 ) FROM my_table;
 ```
 
@@ -168,21 +168,21 @@ Bloom filters are probabilistic data structures for efficient set membership tes
 
 ```sql
 -- Create bloom filter from array
-SELECT bloom_filter_create(['apple', 'banana', 'cherry']);
+SELECT dd_bloom_filter_create(['apple', 'banana', 'cherry']);
 
 -- Create with custom parameters (bits_per_element, num_hash_functions)
-SELECT bloom_filter_create(['apple', 'banana', 'cherry'], 20, 5);
+SELECT dd_bloom_filter_create(['apple', 'banana', 'cherry'], 20, 5);
 
 -- Check if single value may exist
-SELECT bloom_filter_contains(
-    bloom_filter_create(['apple', 'banana', 'cherry']),
+SELECT dd_bloom_filter_contains(
+    dd_bloom_filter_create(['apple', 'banana', 'cherry']),
     'banana'
 );
 -- Returns: true
 
 -- Check if all values may exist
-SELECT bloom_filter_contains_all(
-    bloom_filter_create(['a', 'b', 'c', 'd', 'e']),
+SELECT dd_bloom_filter_contains_all(
+    dd_bloom_filter_create(['a', 'b', 'c', 'd', 'e']),
     ['a', 'c', 'e']
 );
 -- Returns: true
@@ -222,8 +222,8 @@ Run specific test files:
 # Test the main extension
 ./build/release/test/unittest --test-dir . "*dazzle_duck*"
 
-# Test read_arrow_dd function
-./build/release/test/unittest --test-dir . "*read_arrow_dd*"
+# Test dd_read_arrow function
+./build/release/test/unittest --test-dir . "*dd_read_arrow*"
 ```
 
 ### Integration Tests
@@ -246,7 +246,7 @@ This script:
 docker run -d -p 8081:8081 -p 59307:59307 dazzleduck/dazzleduck:latest --conf warehouse=/data
 
 # Run integration tests
-./build/release/test/unittest --test-dir . "*read_arrow_dd_integration*"
+./build/release/test/unittest --test-dir . "*dd_read_arrow_integration*"
 
 # Stop container when done
 docker stop <container-id>
@@ -267,7 +267,7 @@ docker run -d --name ducklake-test -p 8082:8081 -p 59308:59307 \
 curl -s --retry 30 --retry-delay 2 --retry-connrefused http://localhost:8082/health
 
 # Run split tests
-./build/release/test/unittest --test-dir . "*read_arrow_dd_split*"
+./build/release/test/unittest --test-dir . "*dd_read_arrow_split*"
 
 # Cleanup
 docker stop ducklake-test && docker rm ducklake-test

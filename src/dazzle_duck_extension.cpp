@@ -20,7 +20,7 @@ namespace {
 
 struct DazzleDuckVersion {
   static void Register(ExtensionLoader& loader) {
-    auto fn = ScalarFunction("dazzle_duck_version", {}, LogicalType::VARCHAR, ExecuteFn);
+    auto fn = ScalarFunction("dd_version", {}, LogicalType::VARCHAR, ExecuteFn);
     loader.RegisterFunction(fn);
   }
 

@@ -428,7 +428,7 @@ static void ArrayContainsAllWithBloomFilter(DataChunk& args, ExpressionState& st
 }  // namespace
 
 void RegisterArrayContainsAll(ExtensionLoader& loader) {
-	// array_contains_all(haystack_array, needle_array, [use_columnar]) -> boolean
+	// dd_array_contains_all(haystack_array, needle_array, [use_columnar]) -> boolean
 	// Returns true if all elements in needle_array exist in haystack_array
 	// Only supports VARCHAR arrays
 	// Optional third parameter: use_columnar (default true)
@@ -437,7 +437,7 @@ void RegisterArrayContainsAll(ExtensionLoader& loader) {
 
 	// 2-argument version (default columnar processing)
 	auto func2 = ScalarFunction(
-		"array_contains_all",
+		"dd_array_contains_all",
 		{LogicalType::LIST(LogicalType::VARCHAR), LogicalType::LIST(LogicalType::VARCHAR)},
 		LogicalType::BOOLEAN,
 		ArrayContainsAllFunction
@@ -447,7 +447,7 @@ void RegisterArrayContainsAll(ExtensionLoader& loader) {
 
 	// 3-argument version with explicit flag (BOOLEAN)
 	auto func3 = ScalarFunction(
-		"array_contains_all",
+		"dd_array_contains_all",
 		{LogicalType::LIST(LogicalType::VARCHAR), LogicalType::LIST(LogicalType::VARCHAR), LogicalType::BOOLEAN},
 		LogicalType::BOOLEAN,
 		ArrayContainsAllFunction
@@ -459,7 +459,7 @@ void RegisterArrayContainsAll(ExtensionLoader& loader) {
 	// The bloom filter should be created from the haystack using bloom_filter_create()
 	// This allows pre-computing the bloom filter once and reusing it for multiple checks
 	auto func_bloom = ScalarFunction(
-		"array_contains_all",
+		"dd_array_contains_all",
 		{LogicalType::LIST(LogicalType::VARCHAR), LogicalType::LIST(LogicalType::VARCHAR), LogicalType::BLOB},
 		LogicalType::BOOLEAN,
 		ArrayContainsAllWithBloomFilter

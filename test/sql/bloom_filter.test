@@ -4,82 +4,82 @@
 
 require dazzle_duck
 
-# Test bloom_filter_create - basic case
+# Test dd_bloom_filter_create - basic case
 query I
-SELECT octet_length(bloom_filter_create(['a', 'b', 'c'])) > 0;
+SELECT octet_length(dd_bloom_filter_create(['a', 'b', 'c'])) > 0;
 ----
 true
 
-# Test bloom_filter_contains - element exists
+# Test dd_bloom_filter_contains - element exists
 query I
-SELECT bloom_filter_contains(bloom_filter_create(['apple', 'banana', 'cherry']), 'banana');
+SELECT dd_bloom_filter_contains(dd_bloom_filter_create(['apple', 'banana', 'cherry']), 'banana');
 ----
 true
 
-# Test bloom_filter_contains - element does not exist
+# Test dd_bloom_filter_contains - element does not exist
 query I
-SELECT bloom_filter_contains(bloom_filter_create(['apple', 'banana', 'cherry']), 'orange');
+SELECT dd_bloom_filter_contains(dd_bloom_filter_create(['apple', 'banana', 'cherry']), 'orange');
 ----
 false
 
-# Test bloom_filter_contains - empty array
+# Test dd_bloom_filter_contains - empty array
 query I
-SELECT bloom_filter_contains(bloom_filter_create([]), 'anything');
+SELECT dd_bloom_filter_contains(dd_bloom_filter_create([]), 'anything');
 ----
 false
 
-# Test bloom_filter_contains_all - all elements exist
+# Test dd_bloom_filter_contains_all - all elements exist
 query I
-SELECT bloom_filter_contains_all(bloom_filter_create(['a', 'b', 'c', 'd', 'e']), ['a', 'b', 'c']);
+SELECT dd_bloom_filter_contains_all(dd_bloom_filter_create(['a', 'b', 'c', 'd', 'e']), ['a', 'b', 'c']);
 ----
 true
 
-# Test bloom_filter_contains_all - not all elements exist
+# Test dd_bloom_filter_contains_all - not all elements exist
 query I
-SELECT bloom_filter_contains_all(bloom_filter_create(['a', 'b', 'c']), ['a', 'x']);
+SELECT dd_bloom_filter_contains_all(dd_bloom_filter_create(['a', 'b', 'c']), ['a', 'x']);
 ----
 false
 
-# Test bloom_filter_contains_all - empty needle array
+# Test dd_bloom_filter_contains_all - empty needle array
 query I
-SELECT bloom_filter_contains_all(bloom_filter_create(['a', 'b', 'c']), []);
+SELECT dd_bloom_filter_contains_all(dd_bloom_filter_create(['a', 'b', 'c']), []);
 ----
 true
 
 # Test with custom bits_per_element
 query I
-SELECT bloom_filter_contains(bloom_filter_create(['hello', 'world'], 20), 'hello');
+SELECT dd_bloom_filter_contains(dd_bloom_filter_create(['hello', 'world'], 20), 'hello');
 ----
 true
 
 # Test with custom bits_per_element and hash functions
 query I
-SELECT bloom_filter_contains(bloom_filter_create(['hello', 'world'], 15, 5), 'world');
+SELECT dd_bloom_filter_contains(dd_bloom_filter_create(['hello', 'world'], 15, 5), 'world');
 ----
 true
 
 # Test with NULL array
 query I
-SELECT bloom_filter_create(NULL);
+SELECT dd_bloom_filter_create(NULL);
 ----
 NULL
 
-# Test bloom_filter_contains with NULL bloom filter
+# Test dd_bloom_filter_contains with NULL bloom filter
 query I
-SELECT bloom_filter_contains(NULL, 'test');
+SELECT dd_bloom_filter_contains(NULL, 'test');
 ----
 NULL
 
-# Test bloom_filter_contains with NULL value
+# Test dd_bloom_filter_contains with NULL value
 query I
-SELECT bloom_filter_contains(bloom_filter_create(['a', 'b']), NULL);
+SELECT dd_bloom_filter_contains(dd_bloom_filter_create(['a', 'b']), NULL);
 ----
 NULL
 
 # Test with column references
 query I
-SELECT bloom_filter_contains(bf, 'a') FROM (
-    SELECT bloom_filter_create(arr) as bf FROM (
+SELECT dd_bloom_filter_contains(bf, 'a') FROM (
+    SELECT dd_bloom_filter_create(arr) as bf FROM (
         VALUES (['a', 'b', 'c']), (['x', 'y', 'z'])
     ) AS t(arr)
 );
@@ -87,10 +87,10 @@ SELECT bloom_filter_contains(bf, 'a') FROM (
 true
 false
 
-# Test bloom_filter_contains_all with column references
+# Test dd_bloom_filter_contains_all with column references
 query I
-SELECT bloom_filter_contains_all(bf, ['a', 'b']) FROM (
-    SELECT bloom_filter_create(arr) as bf FROM (
+SELECT dd_bloom_filter_contains_all(bf, ['a', 'b']) FROM (
+    SELECT dd_bloom_filter_create(arr) as bf FROM (
         VALUES (['a', 'b', 'c', 'd']), (['a', 'x', 'y', 'z']), (['x', 'y', 'z'])
     ) AS t(arr)
 );
@@ -101,8 +101,8 @@ false
 
 # Test with larger array
 query I
-SELECT bloom_filter_contains(
-    bloom_filter_create(list_transform(range(1, 101), lambda x: 'item_' || x::VARCHAR)),
+SELECT dd_bloom_filter_contains(
+    dd_bloom_filter_create(list_transform(range(1, 101), lambda x: 'item_' || x::VARCHAR)),
     'item_50'
 );
 ----
@@ -110,8 +110,8 @@ true
 
 # Test that non-existent element returns false
 query I
-SELECT bloom_filter_contains(
-    bloom_filter_create(list_transform(range(1, 101), lambda x: 'item_' || x::VARCHAR)),
+SELECT dd_bloom_filter_contains(
+    dd_bloom_filter_create(list_transform(range(1, 101), lambda x: 'item_' || x::VARCHAR)),
     'item_999'
 );
 ----
@@ -119,19 +119,19 @@ false
 
 # Test with special characters
 query I
-SELECT bloom_filter_contains(bloom_filter_create(['hello world', 'foo@bar.com', 'test\ttab']), 'foo@bar.com');
+SELECT dd_bloom_filter_contains(dd_bloom_filter_create(['hello world', 'foo@bar.com', 'test\ttab']), 'foo@bar.com');
 ----
 true
 
 # Test with unicode
 query I
-SELECT bloom_filter_contains(bloom_filter_create(['hello', 'world']), 'hello');
+SELECT dd_bloom_filter_contains(dd_bloom_filter_create(['hello', 'world']), 'hello');
 ----
 true
 
 # Test bloom filter size varies with bits_per_element (use larger arrays to exceed minimum size)
 query I
-SELECT octet_length(bloom_filter_create(list_transform(range(1, 20), lambda x: x::VARCHAR), 10)) < octet_length(bloom_filter_create(list_transform(range(1, 20), lambda x: x::VARCHAR), 64));
+SELECT octet_length(dd_bloom_filter_create(list_transform(range(1, 20), lambda x: x::VARCHAR), 10)) < octet_length(dd_bloom_filter_create(list_transform(range(1, 20), lambda x: x::VARCHAR), 64));
 ----
 true
 

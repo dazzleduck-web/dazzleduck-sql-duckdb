@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Script to run read_arrow_dd integration tests with dazzleduck server
+# Script to run dd_read_arrow integration tests with dazzleduck server
 #
 
 set -e
@@ -82,7 +82,7 @@ fi
 
 # Run the integration tests
 echo -e "${YELLOW}Running integration tests...${NC}"
-./build/release/test/unittest --test-dir . "*read_arrow_dd_integration*"
+./build/release/test/unittest --test-dir . "*dd_read_arrow_integration*"
 TEST_RESULT=$?
 
 if [ $TEST_RESULT -eq 0 ]; then

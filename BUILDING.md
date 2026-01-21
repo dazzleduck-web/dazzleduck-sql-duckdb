@@ -123,7 +123,7 @@ make test
 When using the DuckDB CLI built from this repo, the extension is automatically loaded:
 
 ```sql
-SELECT dazzle_duck_version();
+SELECT dd_version();
 ```
 
 ### Dynamically Loaded
@@ -135,7 +135,7 @@ To load the extension into a standard DuckDB installation:
 LOAD '/path/to/dazzle_duck.duckdb_extension';
 
 -- Verify
-SELECT dazzle_duck_version();
+SELECT dd_version();
 ```
 
 ## Troubleshooting
@@ -208,5 +208,5 @@ git push
 ### Check Current Version
 
 ```sql
-SELECT dazzle_duck_version();
+SELECT dd_version();
 ```

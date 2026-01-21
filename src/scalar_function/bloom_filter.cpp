@@ -17,7 +17,7 @@ static constexpr int32_t MIN_BITS = 64;
 static constexpr int32_t MAX_BITS = 1024 * 1024 * 8;  // 1MB max
 
 //! Bloom filter header stored at the beginning of the BLOB
-//! This allows bloom_filter_contains to know the parameters
+//! This allows dd_bloom_filter_contains to know the parameters
 struct BloomFilterHeader {
 	uint32_t magic;           // Magic number for validation
 	uint32_t num_bits;        // Number of bits in the filter
@@ -48,7 +48,7 @@ static inline bool GetBit(const uint8_t* data, uint32_t bit_pos) {
 	return (data[bit_pos / 8] & (1 << (bit_pos % 8))) != 0;
 }
 
-//! bloom_filter_create(array VARCHAR[], [bits_per_element INTEGER], [num_hash_functions INTEGER]) -> BLOB
+//! dd_bloom_filter_create(array VARCHAR[], [bits_per_element INTEGER], [num_hash_functions INTEGER]) -> BLOB
 //! Creates a bloom filter from an array of strings
 static void BloomFilterCreateFunction(DataChunk& args, ExpressionState& state, Vector& result) {
 	auto count = args.size();
@@ -152,7 +152,7 @@ static void BloomFilterCreateFunction(DataChunk& args, ExpressionState& state, V
 	}
 }
 
-//! bloom_filter_contains(bloom_filter BLOB, value VARCHAR) -> BOOLEAN
+//! dd_bloom_filter_contains(bloom_filter BLOB, value VARCHAR) -> BOOLEAN
 //! Checks if a value may be contained in the bloom filter
 static void BloomFilterContainsFunction(DataChunk& args, ExpressionState& state, Vector& result) {
 	auto count = args.size();
@@ -221,7 +221,7 @@ static void BloomFilterContainsFunction(DataChunk& args, ExpressionState& state,
 	}
 }
 
-//! bloom_filter_contains_all(bloom_filter BLOB, values VARCHAR[]) -> BOOLEAN
+//! dd_bloom_filter_contains_all(bloom_filter BLOB, values VARCHAR[]) -> BOOLEAN
 //! Checks if all values in the array may be contained in the bloom filter
 static void BloomFilterContainsAllFunction(DataChunk& args, ExpressionState& state, Vector& result) {
 	auto count = args.size();
@@ -314,9 +314,9 @@ static void BloomFilterContainsAllFunction(DataChunk& args, ExpressionState& sta
 }  // namespace
 
 void RegisterBloomFilterFunctions(ExtensionLoader& loader) {
-	// bloom_filter_create(array VARCHAR[]) -> BLOB
-	// bloom_filter_create(array VARCHAR[], bits_per_element INTEGER) -> BLOB
-	// bloom_filter_create(array VARCHAR[], bits_per_element INTEGER, num_hash_functions INTEGER) -> BLOB
+	// dd_bloom_filter_create(array VARCHAR[]) -> BLOB
+	// dd_bloom_filter_create(array VARCHAR[], bits_per_element INTEGER) -> BLOB
+	// dd_bloom_filter_create(array VARCHAR[], bits_per_element INTEGER, num_hash_functions INTEGER) -> BLOB
 	// Creates a bloom filter from an array of strings
 	// Parameters:
 	//   - array: Array of strings to add to the filter
@@ -324,7 +324,7 @@ void RegisterBloomFilterFunctions(ExtensionLoader& loader) {
 	//   - num_hash_functions: Number of hash functions (default 3)
 
 	auto create_func1 = ScalarFunction(
-		"bloom_filter_create",
+		"dd_bloom_filter_create",
 		{LogicalType::LIST(LogicalType::VARCHAR)},
 		LogicalType::BLOB,
 		BloomFilterCreateFunction
@@ -333,7 +333,7 @@ void RegisterBloomFilterFunctions(ExtensionLoader& loader) {
 	loader.RegisterFunction(create_func1);
 
 	auto create_func2 = ScalarFunction(
-		"bloom_filter_create",
+		"dd_bloom_filter_create",
 		{LogicalType::LIST(LogicalType::VARCHAR), LogicalType::INTEGER},
 		LogicalType::BLOB,
 		BloomFilterCreateFunction
@@ -342,7 +342,7 @@ void RegisterBloomFilterFunctions(ExtensionLoader& loader) {
 	loader.RegisterFunction(create_func2);
 
 	auto create_func3 = ScalarFunction(
-		"bloom_filter_create",
+		"dd_bloom_filter_create",
 		{LogicalType::LIST(LogicalType::VARCHAR), LogicalType::INTEGER, LogicalType::INTEGER},
 		LogicalType::BLOB,
 		BloomFilterCreateFunction
@@ -350,13 +350,13 @@ void RegisterBloomFilterFunctions(ExtensionLoader& loader) {
 	create_func3.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
 	loader.RegisterFunction(create_func3);
 
-	// bloom_filter_contains(bloom_filter BLOB, value VARCHAR) -> BOOLEAN
+	// dd_bloom_filter_contains(bloom_filter BLOB, value VARCHAR) -> BOOLEAN
 	// Checks if a value may be contained in the bloom filter
 	// Returns true if the value MAY be in the filter (possible false positive)
 	// Returns false if the value is DEFINITELY NOT in the filter
 
 	auto contains_func = ScalarFunction(
-		"bloom_filter_contains",
+		"dd_bloom_filter_contains",
 		{LogicalType::BLOB, LogicalType::VARCHAR},
 		LogicalType::BOOLEAN,
 		BloomFilterContainsFunction
@@ -364,13 +364,13 @@ void RegisterBloomFilterFunctions(ExtensionLoader& loader) {
 	contains_func.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
 	loader.RegisterFunction(contains_func);
 
-	// bloom_filter_contains_all(bloom_filter BLOB, values VARCHAR[]) -> BOOLEAN
+	// dd_bloom_filter_contains_all(bloom_filter BLOB, values VARCHAR[]) -> BOOLEAN
 	// Checks if all values in the array may be contained in the bloom filter
 	// Returns true if ALL values MAY be in the filter
 	// Returns false if ANY value is DEFINITELY NOT in the filter
 
 	auto contains_all_func = ScalarFunction(
-		"bloom_filter_contains_all",
+		"dd_bloom_filter_contains_all",
 		{LogicalType::BLOB, LogicalType::LIST(LogicalType::VARCHAR)},
 		LogicalType::BOOLEAN,
 		BloomFilterContainsAllFunction
