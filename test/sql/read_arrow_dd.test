@@ -5,6 +5,10 @@
 # Require statement will ensure this test is run with this extension loaded
 require dazzle_duck
 
+# Clear default HTTP skip behavior for parameter validation tests
+# These tests fail at parameter validation, before any HTTP calls
+set ignore_error_messages
+
 # Test error: missing both source_table and sql parameters
 statement error
 SELECT * FROM read_arrow_dd('http://localhost:8081');
@@ -22,3 +26,15 @@ statement error
 SELECT * FROM read_arrow_dd('http://localhost:8081', sql := 'SELECT 1', invalid_param := 'test');
 ----
 Invalid named parameter "invalid_param" for function read_arrow_dd
+
+# Test error: split still requires either source_table or sql
+statement error
+SELECT * FROM read_arrow_dd('http://localhost:8081', split := true);
+----
+read_arrow_dd requires either 'source_table' or 'sql' parameter
+
+# Test error: split still requires either source_table or sql (with split=false)
+statement error
+SELECT * FROM read_arrow_dd('http://localhost:8081', split := false);
+----
+read_arrow_dd requires either 'source_table' or 'sql' parameter

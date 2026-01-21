@@ -20,13 +20,16 @@ include_directories(src/include)
 
 set(EXTENSION_SOURCES
     src/http/arrow_http_client.cpp
+    src/http/split_info.cpp
     src/ipc/array_stream.cpp
     src/ipc/http_stream_factory.cpp
     src/ipc/stream_factory.cpp
     src/ipc/stream_reader/base_stream_reader.cpp
     src/ipc/stream_reader/ipc_buffer_stream_reader.cpp
+    src/scalar_function/dd_login.cpp
     src/scalar_function/dd_search.cpp
     src/scanner/read_arrow_dd.cpp
+    src/table_function/dd_splits.cpp
     src/dazzle_duck_extension.cpp)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})

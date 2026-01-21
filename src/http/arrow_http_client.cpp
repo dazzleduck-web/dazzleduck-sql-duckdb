@@ -7,33 +7,43 @@
 namespace duckdb {
 namespace ext_nanoarrow {
 
+//! URL-encode a string for use in query parameters
+static string UrlEncode(const string& input) {
+  string encoded;
+  for (char c : input) {
+    if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      encoded += c;
+    } else if (c == ' ') {
+      encoded += '+';
+    } else {
+      char hex[4];
+      snprintf(hex, sizeof(hex), "%%%02X", static_cast<unsigned char>(c));
+      encoded += hex;
+    }
+  }
+  return encoded;
+}
+
+//! Build base URL ensuring no trailing slash
+static string BuildBaseUrl(const string& url) {
+  string base_url = url;
+  if (!base_url.empty() && base_url.back() == '/') {
+    base_url.pop_back();
+  }
+  return base_url;
+}
+
 string ArrowHttpClient::FetchArrowStream(ClientContext& context, const string& url,
-                                         const string& query) {
+                                         const string& query, const string& auth_token) {
   // Get the HTTP utility from the database
   auto& db = DatabaseInstance::GetDatabase(context);
   auto& http_util = HTTPUtil::Get(db);
 
   // URL-encode the query parameter
-  string encoded_query;
-  for (char c : query) {
-    if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-      encoded_query += c;
-    } else if (c == ' ') {
-      encoded_query += '+';
-    } else {
-      char hex[4];
-      snprintf(hex, sizeof(hex), "%%%02X", static_cast<unsigned char>(c));
-      encoded_query += hex;
-    }
-  }
+  string encoded_query = UrlEncode(query);
 
   // Build the full URL with query endpoint
-  // Ensure base URL doesn't have trailing slash for consistent path building
-  string base_url = url;
-  if (!base_url.empty() && base_url.back() == '/') {
-    base_url.pop_back();
-  }
-  string full_url = base_url + "/v1/query?q=" + encoded_query;
+  string full_url = BuildBaseUrl(url) + "/v1/query?q=" + encoded_query;
 
   // Initialize HTTP parameters (uses httpfs settings for timeout, auth, etc.)
   auto http_params = http_util.InitializeParameters(context, full_url);
@@ -41,6 +51,11 @@ string ArrowHttpClient::FetchArrowStream(ClientContext& context, const string& u
   // Build request headers
   HTTPHeaders headers(db);
   headers.Insert("Accept", "application/vnd.apache.arrow.stream");
+
+  // Add Authorization header if auth token provided
+  if (!auth_token.empty()) {
+    headers.Insert("Authorization", "Bearer " + auth_token);
+  }
 
   // Create GET request without handlers - body will be collected in response->body
   GetRequestInfo request_info(full_url, headers, *http_params, nullptr, nullptr);
@@ -79,6 +94,67 @@ string ArrowHttpClient::FetchArrowStream(ClientContext& context, const string& u
           "Unexpected Content-Type from %s: %s (expected application/vnd.apache.arrow.stream)",
           url, content_type);
     }
+  }
+
+  return response->body;
+}
+
+string ArrowHttpClient::FetchPlanJson(ClientContext& context, const string& url,
+                                      const string& query, const string& auth_token,
+                                      int64_t split_size) {
+  // Get the HTTP utility from the database
+  auto& db = DatabaseInstance::GetDatabase(context);
+  auto& http_util = HTTPUtil::Get(db);
+
+  // URL-encode the query parameter
+  string encoded_query = UrlEncode(query);
+
+  // Build the full URL with plan endpoint
+  string full_url = BuildBaseUrl(url) + "/v1/plan?q=" + encoded_query;
+
+  // Initialize HTTP parameters
+  auto http_params = http_util.InitializeParameters(context, full_url);
+
+  // Build request headers for JSON response
+  HTTPHeaders headers(db);
+  headers.Insert("Accept", "application/json");
+
+  // Add Authorization header if auth token provided
+  if (!auth_token.empty()) {
+    headers.Insert("Authorization", "Bearer " + auth_token);
+  }
+
+  // Add split size header if specified
+  if (split_size > 0) {
+    headers.Insert("x-dd-split-size", std::to_string(split_size));
+  }
+
+  // Create GET request
+  GetRequestInfo request_info(full_url, headers, *http_params, nullptr, nullptr);
+
+  // Make the request
+  auto response = http_util.Request(request_info);
+
+  // Handle errors
+  if (!response->Success()) {
+    if (response->HasRequestError()) {
+      throw IOException("HTTP request to %s/v1/plan failed: %s", url, response->GetRequestError());
+    }
+    throw IOException("HTTP request to %s/v1/plan failed: %s", url, response->GetError());
+  }
+
+  // Check HTTP status code
+  auto status_code = static_cast<int>(response->status);
+  if (status_code >= 400 && status_code < 500) {
+    throw InvalidInputException("HTTP %d error from %s/v1/plan: %s", status_code, url,
+                                response->body);
+  }
+  if (status_code >= 500) {
+    throw IOException("HTTP %d server error from %s/v1/plan: %s", status_code, url,
+                      response->body);
+  }
+  if (status_code < 200 || status_code >= 300) {
+    throw IOException("Unexpected HTTP %d response from %s/v1/plan", status_code, url);
   }
 
   return response->body;
