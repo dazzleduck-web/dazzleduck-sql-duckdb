@@ -203,6 +203,7 @@ git push
 |------|---------|
 | `version.txt` | Single source of truth |
 | `CMakeLists.txt` | Build-time version (synced by script) |
+| `extension_config.cmake` | Extension version for dd_version() (synced by script) |
 | `description.yml` | Community extension version (synced by script) |
 
 ### Check Current Version
