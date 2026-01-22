@@ -19,6 +19,10 @@ echo "Updating version to: $VERSION"
 sed -i '' "s/set(EXTENSION_VERSION.*/set(EXTENSION_VERSION \"$VERSION\")/" "$ROOT_DIR/CMakeLists.txt"
 echo "  Updated CMakeLists.txt"
 
+# Update extension_config.cmake
+sed -i '' "s/EXTENSION_VERSION.*/EXTENSION_VERSION \"$VERSION\"/" "$ROOT_DIR/extension_config.cmake"
+echo "  Updated extension_config.cmake"
+
 # Update description.yml
 sed -i '' "s/^  version:.*/  version: $VERSION/" "$ROOT_DIR/description.yml"
 echo "  Updated description.yml"

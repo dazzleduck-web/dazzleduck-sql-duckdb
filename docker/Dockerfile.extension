@@ -1,0 +1,30 @@
+# Extension build image - uses pre-built DuckDB base
+# Build: docker build -t dazzle-duck-extension -f docker/Dockerfile.extension .
+#
+# Requires: duckdb-builder:v1.4.3 base image
+#
+FROM duckdb-builder:v1.4.3
+
+WORKDIR /build
+
+# Copy extension source (don't copy duckdb/ - use the one from base image)
+COPY CMakeLists.txt extension_config.cmake vcpkg.json version.txt ./
+COPY src/ ./src/
+
+# Build extension
+RUN mkdir -p build/release && \
+    cmake -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DDUCKDB_EXTENSION_CONFIGS="/build/extension_config.cmake" \
+        -S duckdb \
+        -B build/release && \
+    ninja -C build/release -j $(nproc) dazzle_duck_loadable_extension
+
+# Output location
+RUN ls -lh build/release/extension/dazzle_duck/dazzle_duck.duckdb_extension
+
+# Copy extension to /output for easy extraction
+RUN mkdir -p /output && \
+    cp build/release/extension/dazzle_duck/dazzle_duck.duckdb_extension /output/
+
+CMD ["cat", "/output/dazzle_duck.duckdb_extension"]

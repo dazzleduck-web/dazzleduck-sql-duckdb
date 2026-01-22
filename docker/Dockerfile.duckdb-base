@@ -1,0 +1,34 @@
+# Base image with DuckDB v1.4.3 pre-built
+# Build once: docker build -t duckdb-builder:v1.4.3 -f docker/Dockerfile.duckdb-base .
+#
+FROM ubuntu:22.04
+
+ARG DUCKDB_VERSION=v1.4.3
+
+# Install build tools
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    libssl-dev \
+    ninja-build \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Clone DuckDB at specific version
+RUN git clone --depth 1 --branch ${DUCKDB_VERSION} https://github.com/duckdb/duckdb.git
+
+# Build DuckDB core (this is the slow step)
+# Use -j2 to limit memory usage during compilation
+RUN mkdir -p duckdb/build/release && \
+    cmake -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_EXTENSIONS="" \
+        -S duckdb \
+        -B duckdb/build/release && \
+    ninja -C duckdb/build/release -j2
+
+# Keep the build artifacts for extension builds
+VOLUME /build/duckdb
