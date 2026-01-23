@@ -56,7 +56,7 @@ struct ReadArrowDDGlobalState : public GlobalTableFunctionState {
   int64_t split_size = -1;
 
   //! Vector of splits to process
-  vector<SplitInfo> splits;
+  vector<PlanResponse> splits;
 
   //! Next split index to process (atomic for thread safety)
   atomic<idx_t> next_split_idx{0};
@@ -168,9 +168,9 @@ static bool GetNextSplit(ReadArrowDDGlobalState& global_state,
   local_state.stream.reset();
 
   // Create factory for this split's query
-  auto& split = global_state.splits[split_idx];
+  auto& plan_response = global_state.splits[split_idx];
   local_state.factory = make_uniq<HttpIPCStreamFactory>(
-      *global_state.context, global_state.url, split.query, global_state.auth_token);
+      *global_state.context, global_state.url, plan_response.descriptor.statement_handle.query, global_state.auth_token);
   local_state.factory->InitReader();
 
   // Create stream from factory

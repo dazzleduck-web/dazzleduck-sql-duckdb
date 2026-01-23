@@ -20,7 +20,7 @@ struct DDSplitsBindData : public TableFunctionData {
 
 //! Global state for dd_splits function
 struct DDSplitsGlobalState : public GlobalTableFunctionState {
-  vector<SplitInfo> splits;
+  vector<PlanResponse> splits;
   idx_t current_idx = 0;
   bool done = false;
 
@@ -71,8 +71,8 @@ static unique_ptr<FunctionData> DDSplitsBind(ClientContext& context, TableFuncti
   result->split_size = split_size;
 
   // Define output columns
-  return_types.emplace_back(LogicalType::VARCHAR);  // split_id
-  names.emplace_back("split_id");
+  return_types.emplace_back(LogicalType::LIST(LogicalType::VARCHAR));  // endpoints
+  names.emplace_back("endpoints");
 
   return_types.emplace_back(LogicalType::BIGINT);  // query_id
   names.emplace_back("query_id");
@@ -85,6 +85,9 @@ static unique_ptr<FunctionData> DDSplitsBind(ClientContext& context, TableFuncti
 
   return_types.emplace_back(LogicalType::BIGINT);  // split_size
   names.emplace_back("split_size");
+
+  return_types.emplace_back(LogicalType::VARCHAR);  // query_checksum
+  names.emplace_back("query_checksum");
 
   return std::move(result);
 }
@@ -114,22 +117,30 @@ static void DDSplitsScan(ClientContext& context, TableFunctionInput& data, DataC
   idx_t max_count = STANDARD_VECTOR_SIZE;
 
   while (global_state.current_idx < global_state.splits.size() && count < max_count) {
-    auto& split = global_state.splits[global_state.current_idx];
+    auto& plan_response = global_state.splits[global_state.current_idx];
+    auto& stmt_handle = plan_response.descriptor.statement_handle;
 
-    // split_id
-    output.SetValue(0, count, Value(split.id));
+    // endpoints (LIST of VARCHAR)
+    vector<Value> endpoint_values;
+    for (const auto& ep : plan_response.endpoints) {
+      endpoint_values.push_back(Value(ep));
+    }
+    output.SetValue(0, count, Value::LIST(LogicalType::VARCHAR, endpoint_values));
 
     // query_id
-    output.SetValue(1, count, Value::BIGINT(split.query_id));
+    output.SetValue(1, count, Value::BIGINT(stmt_handle.query_id));
 
     // query
-    output.SetValue(2, count, Value(split.query));
+    output.SetValue(2, count, Value(stmt_handle.query));
 
     // producer_id
-    output.SetValue(3, count, Value(split.producer_id));
+    output.SetValue(3, count, Value(stmt_handle.producer_id));
 
     // split_size
-    output.SetValue(4, count, Value::BIGINT(split.split_size));
+    output.SetValue(4, count, Value::BIGINT(stmt_handle.split_size));
+
+    // query_checksum
+    output.SetValue(5, count, Value(stmt_handle.query_checksum));
 
     global_state.current_idx++;
     count++;

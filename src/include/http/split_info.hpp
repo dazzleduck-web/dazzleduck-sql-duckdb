@@ -16,13 +16,24 @@
 namespace duckdb {
 namespace ext_nanoarrow {
 
-//! Represents one split from the plan API
-struct SplitInfo {
-  string id;           //! Split identifier
-  string query;        //! Query for this split
-  string producer_id;  //! Producer ID
-  int64_t query_id = -1;    //! Query ID
-  int64_t split_size = -1;  //! Split size in bytes
+//! Statement handle from the plan API
+struct StatementHandle {
+  string query;              //! The SQL query (potentially modified for this split)
+  int64_t query_id = -1;     //! Unique identifier for the query
+  string producer_id;        //! UUID of the producer that created this plan
+  int64_t split_size = -1;   //! Size of this split in bytes (-1 if not split)
+  string query_checksum;     //! Base64-encoded checksum for query validation
+};
+
+//! Descriptor containing the statement handle
+struct Descriptor {
+  StatementHandle statement_handle;
+};
+
+//! Represents one plan response (split) from the plan API
+struct PlanResponse {
+  vector<string> endpoints;  //! HTTP endpoint URLs where this split can be executed
+  Descriptor descriptor;
 };
 
 //! Fetch and parse splits from the plan API
@@ -31,10 +42,10 @@ struct SplitInfo {
 //! @param query The SQL query to get splits for
 //! @param auth_token Optional JWT auth token
 //! @param split_size Optional split size hint (-1 means not specified)
-//! @return Vector of SplitInfo containing the parsed splits
-vector<SplitInfo> FetchPlanSplits(ClientContext& context, const string& url,
-                                  const string& query, const string& auth_token = "",
-                                  int64_t split_size = -1);
+//! @return Vector of PlanResponse containing the parsed splits
+vector<PlanResponse> FetchPlanSplits(ClientContext& context, const string& url,
+                                     const string& query, const string& auth_token = "",
+                                     int64_t split_size = -1);
 
 }  // namespace ext_nanoarrow
 }  // namespace duckdb

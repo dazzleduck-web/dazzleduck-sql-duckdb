@@ -23,7 +23,7 @@ docs:
     ### Arrow IPC over HTTP Client
     - `dd_read_arrow(url, query)`: Execute queries on remote DuckDB servers via Arrow IPC over HTTP
     - `dd_login(url, user, pass)`: Authenticate and get auth token
-    - `dd_splits(url, table)`: Get table splits for parallel processing (returns split_id, query_id, query, producer_id, split_size)
+    - `dd_splits(url, table)`: Get table splits for parallel processing (returns endpoints, query_id, query, producer_id, split_size, query_checksum)
     - **Filter Pushdown**: WHERE clause filters are automatically sent to the remote server
     - **Projection Pushdown**: Only selected columns are fetched from the server
     - **Split Mode**: Enable parallel execution with `split := true` parameter

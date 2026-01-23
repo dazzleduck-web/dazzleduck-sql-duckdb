@@ -4,6 +4,10 @@ PROJ_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 EXT_NAME=nanoarrow
 EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 
+# Define test target BEFORE include to take precedence
+.PHONY: test
+test: test_all_internal
+
 # Include the Makefile from extension-ci-tools
 include extension-ci-tools/makefiles/duckdb_extension.Makefile
 
@@ -20,3 +24,25 @@ test_release_js:
 
 run_benchmark:
 	python3 benchmark/lineitem.py $(RELEASE_EXT_PATH)
+
+# Unit tests only (excludes slow tests requiring servers)
+test_unit:
+	./build/release/test/unittest "test/*" ~"*_slow*"
+
+# Integration tests (require Docker)
+test_integration:
+	./scripts/run_integration_tests.sh
+
+test_split:
+	./scripts/run_split_tests.sh
+
+# Run all tests: unit tests + integration tests + split tests
+test_all_internal: test_unit test_integration test_split
+	@echo "All tests completed!"
+
+# Alias for convenience
+test_all: test_all_internal
+
+# Override the default test_release_internal to do nothing (we use test_all_internal instead)
+test_release_internal:
+	@true

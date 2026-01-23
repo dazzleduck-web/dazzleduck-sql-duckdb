@@ -247,12 +247,12 @@ SELECT COUNT(*) > 0 FROM dd_splits('http://localhost:8082', source_table := 'dem
 true
 
 # Test dd_splits returns correct columns
-query IIIII
-SELECT split_id IS NOT NULL OR split_id IS NULL, query_id IS NOT NULL OR query_id IS NULL, query IS NOT NULL, producer_id IS NOT NULL, split_size IS NOT NULL OR split_size IS NULL
+query IIIIII
+SELECT endpoints IS NOT NULL, query_id IS NOT NULL OR query_id IS NULL, query IS NOT NULL, producer_id IS NOT NULL, split_size IS NOT NULL OR split_size IS NULL, query_checksum IS NOT NULL OR query_checksum IS NULL
 FROM dd_splits('http://localhost:8082', source_table := 'demo_db.main.demo', auth_token := dd_login('http://localhost:8082', 'admin', 'admin', '{"database":"demo_db","schema":"main","table":"demo"}'))
 LIMIT 1;
 ----
-true	true	true	true	true
+true	true	true	true	true	true
 
 # Test dd_splits with sql parameter
 query T

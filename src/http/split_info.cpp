@@ -9,9 +9,9 @@ namespace ext_nanoarrow {
 
 using namespace duckdb_yyjson;
 
-vector<SplitInfo> FetchPlanSplits(ClientContext& context, const string& url,
-                                  const string& query, const string& auth_token,
-                                  int64_t split_size) {
+vector<PlanResponse> FetchPlanSplits(ClientContext& context, const string& url,
+                                     const string& query, const string& auth_token,
+                                     int64_t split_size) {
   // Fetch JSON from plan endpoint
   string json_response = ArrowHttpClient::FetchPlanJson(context, url, query, auth_token, split_size);
 
@@ -21,7 +21,7 @@ vector<SplitInfo> FetchPlanSplits(ClientContext& context, const string& url,
     throw IOException("Failed to parse JSON response from plan API");
   }
 
-  vector<SplitInfo> splits;
+  vector<PlanResponse> splits;
 
   auto root = yyjson_doc_get_root(doc);
   if (!yyjson_is_arr(root)) {
@@ -32,49 +32,73 @@ vector<SplitInfo> FetchPlanSplits(ClientContext& context, const string& url,
   // Iterate over splits array
   yyjson_arr_iter iter;
   yyjson_arr_iter_init(root, &iter);
-  yyjson_val* split_obj;
+  yyjson_val* plan_obj;
 
-  while ((split_obj = yyjson_arr_iter_next(&iter))) {
-    if (!yyjson_is_obj(split_obj)) {
+  while ((plan_obj = yyjson_arr_iter_next(&iter))) {
+    if (!yyjson_is_obj(plan_obj)) {
       continue;
     }
 
-    SplitInfo split;
+    PlanResponse plan_response;
 
-    // Extract id
-    auto id_val = yyjson_obj_get(split_obj, "id");
-    if (yyjson_is_str(id_val)) {
-      split.id = yyjson_get_str(id_val);
+    // Extract endpoints array
+    auto endpoints_val = yyjson_obj_get(plan_obj, "endpoints");
+    if (yyjson_is_arr(endpoints_val)) {
+      yyjson_arr_iter ep_iter;
+      yyjson_arr_iter_init(endpoints_val, &ep_iter);
+      yyjson_val* ep_val;
+      while ((ep_val = yyjson_arr_iter_next(&ep_iter))) {
+        if (yyjson_is_str(ep_val)) {
+          plan_response.endpoints.push_back(yyjson_get_str(ep_val));
+        }
+      }
     }
 
-    // Extract query
-    auto query_val = yyjson_obj_get(split_obj, "query");
+    // Navigate to descriptor.statementHandle
+    auto descriptor_val = yyjson_obj_get(plan_obj, "descriptor");
+    if (!yyjson_is_obj(descriptor_val)) {
+      continue;
+    }
+
+    auto statement_handle_val = yyjson_obj_get(descriptor_val, "statementHandle");
+    if (!yyjson_is_obj(statement_handle_val)) {
+      continue;
+    }
+
+    // Extract query from statementHandle
+    auto query_val = yyjson_obj_get(statement_handle_val, "query");
     if (yyjson_is_str(query_val)) {
-      split.query = yyjson_get_str(query_val);
+      plan_response.descriptor.statement_handle.query = yyjson_get_str(query_val);
     } else {
       // Skip splits without a query
       continue;
     }
 
-    // Extract producerId
-    auto producer_id_val = yyjson_obj_get(split_obj, "producerId");
+    // Extract producerId from statementHandle
+    auto producer_id_val = yyjson_obj_get(statement_handle_val, "producerId");
     if (yyjson_is_str(producer_id_val)) {
-      split.producer_id = yyjson_get_str(producer_id_val);
+      plan_response.descriptor.statement_handle.producer_id = yyjson_get_str(producer_id_val);
     }
 
-    // Extract queryId
-    auto query_id_val = yyjson_obj_get(split_obj, "queryId");
+    // Extract queryId from statementHandle
+    auto query_id_val = yyjson_obj_get(statement_handle_val, "queryId");
     if (yyjson_is_int(query_id_val)) {
-      split.query_id = yyjson_get_int(query_id_val);
+      plan_response.descriptor.statement_handle.query_id = yyjson_get_int(query_id_val);
     }
 
-    // Extract splitSize
-    auto split_size_val = yyjson_obj_get(split_obj, "splitSize");
+    // Extract splitSize from statementHandle
+    auto split_size_val = yyjson_obj_get(statement_handle_val, "splitSize");
     if (yyjson_is_int(split_size_val)) {
-      split.split_size = yyjson_get_int(split_size_val);
+      plan_response.descriptor.statement_handle.split_size = yyjson_get_int(split_size_val);
     }
 
-    splits.push_back(std::move(split));
+    // Extract queryChecksum from statementHandle
+    auto query_checksum_val = yyjson_obj_get(statement_handle_val, "queryChecksum");
+    if (yyjson_is_str(query_checksum_val)) {
+      plan_response.descriptor.statement_handle.query_checksum = yyjson_get_str(query_checksum_val);
+    }
+
+    splits.push_back(std::move(plan_response));
   }
 
   yyjson_doc_free(doc);

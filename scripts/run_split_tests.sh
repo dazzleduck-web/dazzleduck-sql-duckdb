@@ -1,14 +1,14 @@
 #!/bin/bash
 #
-# Script to run dd_read_arrow integration tests with dazzleduck server
+# Script to run dd_read_arrow split mode tests with DuckLake server
 #
 
 set -e
 
-CONTAINER_NAME="dazzleduck-test"
+CONTAINER_NAME="ducklake-test"
 IMAGE="dazzleduck/dazzleduck:0.0.16"
-HTTP_PORT=8081
-FLIGHT_PORT=59307
+HTTP_PORT=8082
+FLIGHT_PORT=59308
 MAX_WAIT_SECONDS=60
 
 # Colors for output
@@ -18,7 +18,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 cleanup() {
-    echo -e "${YELLOW}Cleaning up...${NC}"
+    echo -e "${YELLOW}Cleaning up split test container...${NC}"
     docker stop "$CONTAINER_NAME" 2>/dev/null || true
     docker rm "$CONTAINER_NAME" 2>/dev/null || true
 }
@@ -39,26 +39,27 @@ if [ ! -f "./build/release/test/unittest" ]; then
 fi
 
 # Stop any existing container with the same name
-echo -e "${YELLOW}Stopping any existing test container...${NC}"
+echo -e "${YELLOW}Stopping any existing split test container...${NC}"
 docker stop "$CONTAINER_NAME" 2>/dev/null || true
 docker rm "$CONTAINER_NAME" 2>/dev/null || true
 
-# Start the dazzleduck container
-echo -e "${YELLOW}Starting dazzleduck container...${NC}"
+# Start the DuckLake container with restricted access mode
+echo -e "${YELLOW}Starting DuckLake container on port $HTTP_PORT...${NC}"
 docker run -d \
     --name "$CONTAINER_NAME" \
-    -p "$FLIGHT_PORT:$FLIGHT_PORT" \
-    -p "$HTTP_PORT:$HTTP_PORT" \
+    -p "$HTTP_PORT:8081" \
+    -p "$FLIGHT_PORT:59307" \
     "$IMAGE" \
-    --conf warehouse=/data
+    --conf 'dazzleduck_server.access_mode=RESTRICTED' \
+    --conf 'dazzleduck_server.startup_script_provider.script_location="/startup/ducklake.sql"'
 
 # Wait for the server to be ready
-echo -e "${YELLOW}Waiting for server to be ready...${NC}"
+echo -e "${YELLOW}Waiting for DuckLake server to be ready...${NC}"
 WAIT_COUNT=0
 while [ $WAIT_COUNT -lt $MAX_WAIT_SECONDS ]; do
     # Try to connect to the HTTP endpoint
-    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$HTTP_PORT/v1/query?q=SELECT%201" 2>/dev/null | grep -q "200"; then
-        echo -e "${GREEN}Server is ready!${NC}"
+    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$HTTP_PORT/health" 2>/dev/null | grep -q "200"; then
+        echo -e "${GREEN}DuckLake server is ready!${NC}"
         break
     fi
 
@@ -75,20 +76,20 @@ while [ $WAIT_COUNT -lt $MAX_WAIT_SECONDS ]; do
 done
 
 if [ $WAIT_COUNT -ge $MAX_WAIT_SECONDS ]; then
-    echo -e "${RED}Error: Server did not become ready within $MAX_WAIT_SECONDS seconds${NC}"
+    echo -e "${RED}Error: DuckLake server did not become ready within $MAX_WAIT_SECONDS seconds${NC}"
     docker logs "$CONTAINER_NAME"
     exit 1
 fi
 
-# Run the integration tests
-echo -e "${YELLOW}Running integration tests...${NC}"
-./build/release/test/unittest --test-dir . "*dd_read_arrow_integration*"
+# Run the split mode tests
+echo -e "${YELLOW}Running split mode tests...${NC}"
+./build/release/test/unittest --test-dir . "*dd_read_arrow_split*"
 TEST_RESULT=$?
 
 if [ $TEST_RESULT -eq 0 ]; then
-    echo -e "${GREEN}All integration tests passed!${NC}"
+    echo -e "${GREEN}All split mode tests passed!${NC}"
 else
-    echo -e "${RED}Some tests failed${NC}"
+    echo -e "${RED}Some split tests failed${NC}"
 fi
 
 exit $TEST_RESULT
