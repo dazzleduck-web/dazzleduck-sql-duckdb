@@ -21,6 +21,7 @@ include_directories(src/include)
 
 set(EXTENSION_SOURCES
     src/http/arrow_http_client.cpp
+    src/http/cancel_monitor.cpp
     src/http/split_info.cpp
     src/ipc/array_stream.cpp
     src/ipc/http_stream_factory.cpp

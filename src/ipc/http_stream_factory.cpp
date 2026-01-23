@@ -7,16 +7,17 @@ namespace duckdb {
 namespace ext_nanoarrow {
 
 HttpIPCStreamFactory::HttpIPCStreamFactory(ClientContext& context, string url, string query,
-                                           string auth_token)
+                                           string auth_token, int64_t query_id)
     : ArrowIPCStreamFactory(Allocator::Get(context)),
       context(context),
       url(std::move(url)),
       query(std::move(query)),
-      auth_token(std::move(auth_token)) {}
+      auth_token(std::move(auth_token)),
+      query_id(query_id) {}
 
 void HttpIPCStreamFactory::InitReader() {
   // Fetch the Arrow IPC stream from the remote server using DuckDB's HTTP utilities
-  response_data = ArrowHttpClient::FetchArrowStream(context, url, query, auth_token);
+  response_data = ArrowHttpClient::FetchArrowStream(context, url, query, auth_token, query_id);
 
   // Create buffer pointing to the response data
   vector<ArrowIPCBuffer> buffers;

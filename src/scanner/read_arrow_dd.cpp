@@ -1,6 +1,7 @@
 #include "table_function/read_arrow_dd.hpp"
 
 #include "http/arrow_http_client.hpp"
+#include "http/cancel_monitor.hpp"
 #include "http/split_info.hpp"
 #include "ipc/http_stream_factory.hpp"
 #include "table_function/arrow_ipc_function_data.hpp"
@@ -14,6 +15,8 @@
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
+
+#include <random>
 
 namespace duckdb {
 namespace ext_nanoarrow {
@@ -39,6 +42,7 @@ struct ReadArrowDDFunctionData : public ArrowIPCFunctionData {
   string auth_token;  //! JWT auth token for Authorization header
   bool split_mode = false;  //! Whether to use split mode for parallel execution
   int64_t split_size = -1;  //! Split size hint for plan API (-1 means not specified)
+  int64_t query_id = -1;  //! Generated query ID for non-split mode cancellation
 };
 
 //! Custom global state for parallel split execution
@@ -57,6 +61,9 @@ struct ReadArrowDDGlobalState : public GlobalTableFunctionState {
 
   //! Vector of splits to process
   vector<PlanResponse> splits;
+
+  //! Generated query IDs for each split (for cancellation tracking)
+  vector<int64_t> query_ids;
 
   //! Next split index to process (atomic for thread safety)
   atomic<idx_t> next_split_idx{0};
@@ -78,6 +85,9 @@ struct ReadArrowDDGlobalState : public GlobalTableFunctionState {
 
   //! Client context reference for HTTP calls
   ClientContext* context = nullptr;
+
+  //! Cancel guard for automatic query cancellation on interrupt
+  QueryCancelGuard cancel_guard;
 
   idx_t MaxThreads() const override {
     if (split_mode) {
@@ -167,10 +177,12 @@ static bool GetNextSplit(ReadArrowDDGlobalState& global_state,
   local_state.current_chunk.reset();
   local_state.stream.reset();
 
-  // Create factory for this split's query
+  // Create factory for this split's query with the generated query ID
   auto& plan_response = global_state.splits[split_idx];
+  auto query_id = global_state.query_ids[split_idx];
   local_state.factory = make_uniq<HttpIPCStreamFactory>(
-      *global_state.context, global_state.url, plan_response.descriptor.statement_handle.query, global_state.auth_token);
+      *global_state.context, global_state.url, plan_response.descriptor.statement_handle.query,
+      global_state.auth_token, query_id);
   local_state.factory->InitReader();
 
   // Create stream from factory
@@ -340,8 +352,14 @@ struct ReadArrowDDFunction : ArrowTableFunction {
       query = sql_query;
     }
 
+    // Generate a random query ID for tracking/cancellation
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+    std::uniform_int_distribution<int64_t> dis(1, std::numeric_limits<int64_t>::max());
+    int64_t query_id = dis(gen);
+
     // Create the stream factory and fetch initial data to get schema
-    auto stream_factory = make_uniq<HttpIPCStreamFactory>(context, url, query, auth_token);
+    auto stream_factory = make_uniq<HttpIPCStreamFactory>(context, url, query, auth_token, query_id);
     stream_factory->InitReader();
 
     // Store column names for pushdown query construction (will get names after schema)
@@ -352,9 +370,10 @@ struct ReadArrowDDFunction : ArrowTableFunction {
     auto res = make_uniq<ReadArrowDDFunctionData>(
         std::move(stream_factory), url, query, column_names, auth_token);
 
-    // Set split mode and size
+    // Set split mode, size, and query ID
     res->split_mode = split_mode;
     res->split_size = split_size;
+    res->query_id = query_id;
 
     // Get the schema directly into res
     res->factory->GetFileSchema(res->schema_root);
@@ -428,19 +447,45 @@ struct ReadArrowDDFunction : ArrowTableFunction {
         throw IOException("Plan API returned no splits");
       }
 
+      // Generate random query IDs for each split (for tracking/cancellation)
+      // Use random_device and mt19937 for good randomness
+      std::random_device rd;
+      std::mt19937_64 gen(rd());
+      std::uniform_int_distribution<int64_t> dis(1, std::numeric_limits<int64_t>::max());
+
+      result->query_ids.reserve(result->splits.size());
+      for (size_t i = 0; i < result->splits.size(); i++) {
+        result->query_ids.push_back(dis(gen));
+      }
+
+      // Register all generated query IDs with the cancel guard for automatic cancellation on interrupt
+      for (auto query_id : result->query_ids) {
+        result->cancel_guard.AddQuery(&context, data.url, data.auth_token, query_id);
+      }
+
       return std::move(result);
     }
 
     // Non-split mode: use standard Arrow scan
+    // Generate a new query ID if we have pushdown (query changes), otherwise use the one from Bind
+    int64_t query_id = data.query_id;
+
     if (has_projection || has_filters) {
-      // Re-create the stream factory with the pushdown query
+      // Generate new query ID for the modified query
+      std::random_device rd;
+      std::mt19937_64 gen(rd());
+      std::uniform_int_distribution<int64_t> dis(1, std::numeric_limits<int64_t>::max());
+      query_id = dis(gen);
+
+      // Re-create the stream factory with the pushdown query and new ID
       auto new_factory =
-          make_uniq<HttpIPCStreamFactory>(context, data.url, pushdown_query, data.auth_token);
+          make_uniq<HttpIPCStreamFactory>(context, data.url, pushdown_query, data.auth_token, query_id);
       new_factory->InitReader();
 
       // Update the factory in the function data (const_cast needed due to DuckDB API)
       auto& mutable_data = const_cast<ReadArrowDDFunctionData&>(data);
       mutable_data.factory = std::move(new_factory);
+      mutable_data.query_id = query_id;
 
       // IMPORTANT: Also update stream_factory_ptr since ArrowScanInitGlobal uses it
       mutable_data.stream_factory_ptr = reinterpret_cast<uintptr_t>(mutable_data.factory.get());
@@ -449,6 +494,13 @@ struct ReadArrowDDFunction : ArrowTableFunction {
     // Create our wrapper global state that holds the arrow global state
     auto result = make_uniq<ReadArrowDDGlobalState>();
     result->split_mode = false;
+    result->url = data.url;
+    result->auth_token = data.auth_token;
+    result->context = &context;
+
+    // Register query ID with cancel guard for non-split mode
+    result->cancel_guard.AddQuery(&context, data.url, data.auth_token, query_id);
+
     result->arrow_global_state = ArrowScanInitGlobal(context, input);
     return std::move(result);
   }

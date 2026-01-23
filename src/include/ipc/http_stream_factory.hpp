@@ -18,13 +18,14 @@ namespace ext_nanoarrow {
 class HttpIPCStreamFactory final : public ArrowIPCStreamFactory {
  public:
   explicit HttpIPCStreamFactory(ClientContext& context, string url, string query,
-                                string auth_token = "");
+                                string auth_token = "", int64_t query_id = -1);
   void InitReader() override;
 
   ClientContext& context;
   string url;
   string query;
   string auth_token;
+  int64_t query_id;  //! Query ID for tracking/cancellation
 
   //! Buffer holding the response data - must outlive the reader
   string response_data;

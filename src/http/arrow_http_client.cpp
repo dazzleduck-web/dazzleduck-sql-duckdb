@@ -34,7 +34,8 @@ static string BuildBaseUrl(const string& url) {
 }
 
 string ArrowHttpClient::FetchArrowStream(ClientContext& context, const string& url,
-                                         const string& query, const string& auth_token) {
+                                         const string& query, const string& auth_token,
+                                         int64_t query_id) {
   // Get the HTTP utility from the database
   auto& db = DatabaseInstance::GetDatabase(context);
   auto& http_util = HTTPUtil::Get(db);
@@ -44,6 +45,11 @@ string ArrowHttpClient::FetchArrowStream(ClientContext& context, const string& u
 
   // Build the full URL with query endpoint
   string full_url = BuildBaseUrl(url) + "/v1/query?q=" + encoded_query;
+
+  // Add query ID if specified (for tracking/cancellation)
+  if (query_id >= 0) {
+    full_url += "&id=" + std::to_string(query_id);
+  }
 
   // Initialize HTTP parameters (uses httpfs settings for timeout, auth, etc.)
   auto http_params = http_util.InitializeParameters(context, full_url);
@@ -158,6 +164,38 @@ string ArrowHttpClient::FetchPlanJson(ClientContext& context, const string& url,
   }
 
   return response->body;
+}
+
+void ArrowHttpClient::CancelQuery(ClientContext& context, const string& url,
+                                  int64_t query_id, const string& auth_token) {
+  // Get the HTTP utility from the database
+  auto& db = DatabaseInstance::GetDatabase(context);
+  auto& http_util = HTTPUtil::Get(db);
+
+  // Build the full URL with cancel endpoint
+  string full_url = BuildBaseUrl(url) + "/v1/cancel?id=" + std::to_string(query_id);
+
+  // Initialize HTTP parameters
+  auto http_params = http_util.InitializeParameters(context, full_url);
+
+  // Build request headers
+  HTTPHeaders headers(db);
+  headers.Insert("Accept", "text/plain");
+
+  // Add Authorization header if auth token provided
+  if (!auth_token.empty()) {
+    headers.Insert("Authorization", "Bearer " + auth_token);
+  }
+
+  // Create GET request
+  GetRequestInfo request_info(full_url, headers, *http_params, nullptr, nullptr);
+
+  // Make the request - ignore response (best effort cancellation)
+  try {
+    http_util.Request(request_info);
+  } catch (...) {
+    // Ignore errors - cancellation is best effort
+  }
 }
 
 }  // namespace ext_nanoarrow
