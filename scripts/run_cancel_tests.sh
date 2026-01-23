@@ -5,7 +5,7 @@
 # This test verifies that:
 # 1. Query IDs are passed to the server
 # 2. Cancel requests are sent when a query is interrupted
-# 3. The /v1/ui/api/metrics endpoint shows running/cancelled queries
+# 3. The /v1/ui/api/metrics endpoint shows the cancelled statement count increase
 #
 
 set -e
@@ -21,6 +21,21 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+
+# Extract "Cancelled Statements" count from metrics HTML
+get_cancelled_count() {
+    local metrics="$1"
+    # The HTML has: <th>Cancelled Statements</th> ... <td>N</td>
+    # We extract the 4th <td> value in the Application table (after Start Time, Running, Completed, Cancelled)
+    echo "$metrics" | grep -A 20 '<caption>Application</caption>' | grep '<td>' | sed -n '4p' | sed 's/.*<td>\([0-9]*\)<\/td>.*/\1/'
+}
+
+# Extract "Running Statements" count from metrics HTML
+get_running_count() {
+    local metrics="$1"
+    # The 2nd <td> in Application table is Running Statements
+    echo "$metrics" | grep -A 20 '<caption>Application</caption>' | grep '<td>' | sed -n '2p' | sed 's/.*<td>\([0-9]*\)<\/td>.*/\1/'
+}
 
 cleanup() {
     echo -e "${YELLOW}Cleaning up...${NC}"
@@ -93,7 +108,12 @@ if [ $WAIT_COUNT -ge $MAX_WAIT_SECONDS ]; then
 fi
 
 echo ""
-echo -e "${YELLOW}=== Test 1: Verify query ID is sent to server ===${NC}"
+echo -e "${YELLOW}=== Test: Query cancellation with metrics verification ===${NC}"
+
+# Get initial cancelled count
+METRICS_BEFORE=$(curl -s "http://localhost:$HTTP_PORT/v1/ui/api/metrics")
+CANCELLED_BEFORE=$(get_cancelled_count "$METRICS_BEFORE")
+echo -e "${YELLOW}Initial cancelled statements count: ${CANCELLED_BEFORE:-0}${NC}"
 
 # Create a SQL script that runs a slow query
 cat > /tmp/cancel_test.sql << 'EOF'
@@ -106,68 +126,67 @@ echo -e "${YELLOW}Starting a slow query in background...${NC}"
 "$DUCKDB_CLI" < /tmp/cancel_test.sql > /tmp/cancel_test_output.txt 2>&1 &
 DUCKDB_PID=$!
 
-# Wait a moment for the query to start
-sleep 2
-
-# Check if process is still running (query should be slow enough)
-if ! kill -0 "$DUCKDB_PID" 2>/dev/null; then
-    echo -e "${YELLOW}Query completed quickly, trying with larger dataset...${NC}"
-    # Query completed too fast, that's ok for now
-fi
-
-# Check the metrics endpoint to see if query is registered
-echo -e "${YELLOW}Checking /v1/ui/api/metrics for running queries...${NC}"
-METRICS=$(curl -s "http://localhost:$HTTP_PORT/v1/ui/api/metrics")
-
-if echo "$METRICS" | grep -q "Running Statements"; then
-    echo -e "${GREEN}Metrics endpoint is accessible${NC}"
-    # Check if there's a query ID in the metrics
-    if echo "$METRICS" | grep -qi "statement\|query"; then
-        echo -e "${GREEN}Server shows statement activity${NC}"
+# Wait for the query to start and appear in metrics
+echo -e "${YELLOW}Waiting for query to appear in server metrics...${NC}"
+QUERY_STARTED=false
+for i in {1..10}; do
+    sleep 1
+    if ! kill -0 "$DUCKDB_PID" 2>/dev/null; then
+        echo -e "${YELLOW}Query completed before we could cancel it${NC}"
+        break
     fi
-else
-    echo -e "${YELLOW}Metrics endpoint returned: ${NC}"
-    echo "$METRICS" | head -20
-fi
+
+    METRICS=$(curl -s "http://localhost:$HTTP_PORT/v1/ui/api/metrics")
+    RUNNING=$(get_running_count "$METRICS")
+    if [ "${RUNNING:-0}" -gt 0 ]; then
+        echo -e "${GREEN}Query is running on server (Running Statements: $RUNNING)${NC}"
+        QUERY_STARTED=true
+        break
+    fi
+    echo -n "."
+done
 
 # Send SIGINT to cancel the query
 if kill -0 "$DUCKDB_PID" 2>/dev/null; then
     echo -e "${YELLOW}Sending SIGINT to cancel query (PID: $DUCKDB_PID)...${NC}"
     kill -INT "$DUCKDB_PID" 2>/dev/null || true
 
-    # Wait a moment for cancellation to propagate
-    sleep 1
-
-    # Check metrics again to see if cancel was received
-    echo -e "${YELLOW}Checking metrics after cancellation...${NC}"
-    METRICS_AFTER=$(curl -s "http://localhost:$HTTP_PORT/v1/ui/api/metrics")
+    # Wait for cancellation to propagate
+    sleep 2
 
     # Wait for process to exit
     wait "$DUCKDB_PID" 2>/dev/null || true
     DUCKDB_PID=""
 
-    echo -e "${GREEN}Query was interrupted${NC}"
+    echo -e "${GREEN}Query process terminated${NC}"
 else
     echo -e "${YELLOW}Query already completed${NC}"
     DUCKDB_PID=""
 fi
 
-echo ""
-echo -e "${YELLOW}=== Test 2: Verify cancel endpoint is called ===${NC}"
+# Check metrics after cancellation
+echo -e "${YELLOW}Checking metrics after cancellation...${NC}"
+sleep 1
+METRICS_AFTER=$(curl -s "http://localhost:$HTTP_PORT/v1/ui/api/metrics")
+CANCELLED_AFTER=$(get_cancelled_count "$METRICS_AFTER")
+echo -e "${YELLOW}Cancelled statements count after: ${CANCELLED_AFTER:-0}${NC}"
 
-# For this test, we'll check the docker logs for cancel requests
-echo -e "${YELLOW}Checking server logs for cancel requests...${NC}"
-LOGS=$(docker logs "$CONTAINER_NAME" 2>&1)
+# Verify cancellation was registered
+CANCELLED_BEFORE=${CANCELLED_BEFORE:-0}
+CANCELLED_AFTER=${CANCELLED_AFTER:-0}
 
-if echo "$LOGS" | grep -qi "cancel"; then
-    echo -e "${GREEN}Found cancel-related activity in server logs${NC}"
-    echo "$LOGS" | grep -i "cancel" | tail -5
+if [ "$CANCELLED_AFTER" -gt "$CANCELLED_BEFORE" ]; then
+    echo -e "${GREEN}SUCCESS: Cancelled statements count increased from $CANCELLED_BEFORE to $CANCELLED_AFTER${NC}"
+    echo -e "${GREEN}This confirms the cancel HTTP request was received by the server!${NC}"
+elif [ "$QUERY_STARTED" = true ]; then
+    echo -e "${YELLOW}WARNING: Cancelled count did not increase (before: $CANCELLED_BEFORE, after: $CANCELLED_AFTER)${NC}"
+    echo -e "${YELLOW}The query may have completed before the cancel request was processed${NC}"
 else
-    echo -e "${YELLOW}No explicit cancel messages in logs (server may not log cancellations)${NC}"
+    echo -e "${YELLOW}SKIPPED: Query completed too quickly to test cancellation${NC}"
 fi
 
 echo ""
-echo -e "${YELLOW}=== Test 3: Run a quick query to verify normal operation ===${NC}"
+echo -e "${YELLOW}=== Verify server is still responsive ===${NC}"
 
 # Run a simple query to make sure the server is still working
 RESULT=$(curl -s "http://localhost:$HTTP_PORT/v1/query?q=SELECT%2042%20as%20answer" | xxd -p | head -c 100)
@@ -180,6 +199,5 @@ fi
 
 echo ""
 echo -e "${GREEN}=== Cancellation tests completed ===${NC}"
-echo -e "${YELLOW}Note: Full verification of cancel HTTP requests requires server-side logging${NC}"
 
 exit 0

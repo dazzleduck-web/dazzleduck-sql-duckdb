@@ -119,11 +119,25 @@ public:
   bool HasQueries() const { return !handles.empty(); }
 
 private:
+  //! Information about a registered query (for sync cancel on destruction)
+  struct QueryInfo {
+    ClientContext* context;
+    string url;
+    string auth_token;
+    int64_t query_id;
+  };
+
   //! Unregister all queries from the monitor
   void UnregisterAll();
 
+  //! Send cancel requests for interrupted queries
+  void CancelInterruptedQueries();
+
   //! Registration handles from GlobalCancelMonitor
   vector<uint64_t> handles;
+
+  //! Query info for synchronous cancellation on destruction
+  vector<QueryInfo> query_infos;
 
   //! Whether queries completed successfully
   bool completed = false;

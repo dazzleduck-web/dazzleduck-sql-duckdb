@@ -161,18 +161,28 @@ void GlobalCancelMonitor::CheckAllQueries() {
 //===----------------------------------------------------------------------===//
 
 QueryCancelGuard::~QueryCancelGuard() {
+  // If not completed, check for interrupted queries and cancel them
+  if (!completed) {
+    CancelInterruptedQueries();
+  }
   UnregisterAll();
 }
 
 QueryCancelGuard::QueryCancelGuard(QueryCancelGuard&& other) noexcept
-    : handles(std::move(other.handles)), completed(other.completed) {
+    : handles(std::move(other.handles)),
+      query_infos(std::move(other.query_infos)),
+      completed(other.completed) {
   other.completed = true;  // Prevent other from unregistering
 }
 
 QueryCancelGuard& QueryCancelGuard::operator=(QueryCancelGuard&& other) noexcept {
   if (this != &other) {
+    if (!completed) {
+      CancelInterruptedQueries();
+    }
     UnregisterAll();
     handles = std::move(other.handles);
+    query_infos = std::move(other.query_infos);
     completed = other.completed;
     other.completed = true;
   }
@@ -187,11 +197,15 @@ void QueryCancelGuard::AddQuery(ClientContext* context, const string& url,
 
   auto handle = GlobalCancelMonitor::Get().Register(context, url, auth_token, query_id);
   handles.push_back(handle);
+
+  // Store query info for synchronous cancellation on destruction
+  query_infos.push_back({context, url, auth_token, query_id});
 }
 
 void QueryCancelGuard::MarkCompleted() {
   completed = true;
   UnregisterAll();
+  query_infos.clear();
 }
 
 void QueryCancelGuard::UnregisterAll() {
@@ -199,6 +213,24 @@ void QueryCancelGuard::UnregisterAll() {
     GlobalCancelMonitor::Get().Unregister(handle);
   }
   handles.clear();
+}
+
+void QueryCancelGuard::CancelInterruptedQueries() {
+  // If we reach this code, the query was not marked as completed.
+  // This means either:
+  // 1. The query was interrupted (SIGINT)
+  // 2. An exception occurred during query execution
+  // In either case, we should send cancel requests to clean up server-side state.
+  for (auto& info : query_infos) {
+    if (info.context && info.query_id >= 0) {
+      try {
+        ArrowHttpClient::CancelQuery(*info.context, info.url,
+                                     info.query_id, info.auth_token);
+      } catch (...) {
+        // Best effort - ignore errors during cancellation
+      }
+    }
+  }
 }
 
 }  // namespace ext_nanoarrow

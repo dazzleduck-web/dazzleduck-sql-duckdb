@@ -173,7 +173,8 @@ void ArrowHttpClient::CancelQuery(ClientContext& context, const string& url,
   auto& http_util = HTTPUtil::Get(db);
 
   // Build the full URL with cancel endpoint
-  string full_url = BuildBaseUrl(url) + "/v1/cancel?id=" + std::to_string(query_id);
+  // Note: q parameter is required by AbstractQueryBasedService even if empty
+  string full_url = BuildBaseUrl(url) + "/v1/cancel?q=&id=" + std::to_string(query_id);
 
   // Initialize HTTP parameters
   auto http_params = http_util.InitializeParameters(context, full_url);
