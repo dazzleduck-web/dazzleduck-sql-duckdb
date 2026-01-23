@@ -15,9 +15,50 @@ This extension provides functionality to query remote Arrow IPC endpoints.
 
 ## Installation
 
+### From Community Extensions
+
 ```sql
 INSTALL dazzle_duck FROM community;
 LOAD dazzle_duck;
+```
+
+### From GitHub Releases
+
+Download the extension for your platform from [GitHub Releases](https://github.com/dazzleduck-web/dazzleduck-sql-duckdb/releases):
+
+| Platform | File |
+|----------|------|
+| Mac ARM64 (Apple Silicon) | `dazzle_duck.darwin_arm64.duckdb_extension` |
+| Linux x86_64 | `dazzle_duck.linux_amd64.duckdb_extension` |
+
+Then load it in DuckDB:
+
+```sql
+-- Load from downloaded file
+LOAD '/path/to/dazzle_duck.duckdb_extension';
+
+-- Verify installation
+SELECT * FROM duckdb_extensions() WHERE extension_name = 'dazzle_duck';
+```
+
+**Example (Mac):**
+```bash
+# Download
+curl -L -o dazzle_duck.duckdb_extension \
+  "https://github.com/dazzleduck-web/dazzleduck-sql-duckdb/releases/latest/download/dazzle_duck.darwin_arm64.duckdb_extension"
+
+# Use in DuckDB
+duckdb -c "LOAD 'dazzle_duck.duckdb_extension'; SELECT dd_version();"
+```
+
+**Example (Linux):**
+```bash
+# Download
+curl -L -o dazzle_duck.duckdb_extension \
+  "https://github.com/dazzleduck-web/dazzleduck-sql-duckdb/releases/latest/download/dazzle_duck.linux_amd64.duckdb_extension"
+
+# Use in DuckDB
+duckdb -c "LOAD 'dazzle_duck.duckdb_extension'; SELECT dd_version();"
 ```
 
 ## Usage
