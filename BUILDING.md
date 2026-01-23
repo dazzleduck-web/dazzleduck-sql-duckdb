@@ -55,12 +55,37 @@ brew install cmake ninja
 make release
 ```
 
-### Windows (Visual Studio)
+### Windows (Native MSVC via WSL)
 
-**Prerequisites:**
-- Visual Studio 2019 or 2022 with "Desktop development with C++" workload
-- CMake (https://cmake.org/download/)
-- Git (https://git-scm.com/)
+The recommended way to build for Windows is using native MSVC from WSL. This produces extensions compatible with official DuckDB Windows releases.
+
+**Prerequisites (one-time setup):**
+
+```powershell
+# Install Visual Studio Build Tools (from PowerShell as admin)
+winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive"
+
+# Install Git for Windows
+winget install Git.Git
+```
+
+**Build:**
+
+```bash
+# From WSL, run the build script
+./scripts/build-windows.sh
+
+# For a clean rebuild
+./scripts/build-windows.sh --clean
+```
+
+Output: `dist/v1.4.3/dazzle_duck.windows_amd64.duckdb_extension`
+
+The build uses `C:\duckdb-build\` as the working directory on Windows.
+
+### Windows (Visual Studio - Manual)
+
+If you prefer building directly on Windows without WSL:
 
 ```powershell
 # Open "Developer Command Prompt for VS 2022"
@@ -76,17 +101,36 @@ cmake -G "Visual Studio 17 2022" -A x64 ^
 cmake --build . --config Release
 ```
 
-### Windows (MSYS2/MinGW)
+## Docker Builds
+
+Docker builds are available for Linux cross-compilation.
+
+### Linux Build (Docker)
 
 ```bash
-# Install MSYS2 from https://www.msys2.org/
+# First time: build the base image (slow, ~10 minutes)
+./docker/build-linux.sh --base
 
-# In MSYS2 MINGW64 terminal:
-pacman -Syu
-pacman -S mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake ninja git make
+# Build extension
+./docker/build-linux.sh
 
-# Build
-make release
+# Or build both in one step
+./docker/build-linux.sh --all
+```
+
+Output: `dist/v1.4.3/dazzle_duck.linux_amd64.duckdb_extension`
+
+### Build All Platforms
+
+```bash
+# Linux (Docker)
+./docker/build-linux.sh --all
+
+# Windows (native MSVC via WSL)
+./scripts/build-windows.sh
+
+# Check outputs
+ls -la dist/v1.4.3/
 ```
 
 ## Build Output
