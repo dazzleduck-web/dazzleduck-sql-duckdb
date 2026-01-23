@@ -11,6 +11,10 @@ test: test_all_internal
 # Include the Makefile from extension-ci-tools
 include extension-ci-tools/makefiles/duckdb_extension.Makefile
 
+# Override test_release_internal to run our full test suite instead of just unittest
+test_release_internal: test_all_internal
+	@true
+
 # Client tests
 DEBUG_EXT_PATH='$(PROJ_DIR)build/debug/extension/nanoarrow/nanoarrow.duckdb_extension'
 RELDEBUG_EXT_PATH='$(PROJ_DIR)build/release/extension/nanoarrow/nanoarrow.duckdb_extension'
@@ -46,6 +50,3 @@ test_all_internal: test_unit test_integration test_split test_cancel
 # Alias for convenience
 test_all: test_all_internal
 
-# Override the default test_release_internal to do nothing (we use test_all_internal instead)
-test_release_internal:
-	@true

@@ -25,6 +25,7 @@ echo "  Updated extension_config.cmake"
 
 # Update description.yml
 sed -i '' "s/^  version:.*/  version: $VERSION/" "$ROOT_DIR/description.yml"
+sed -i '' "s/^  ref:.*/  ref: v$VERSION/" "$ROOT_DIR/description.yml"
 echo "  Updated description.yml"
 
 echo "Done!"
