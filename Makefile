@@ -36,8 +36,11 @@ test_integration:
 test_split:
 	./scripts/run_split_tests.sh
 
-# Run all tests: unit tests + integration tests + split tests
-test_all_internal: test_unit test_integration test_split
+test_cancel:
+	./scripts/run_cancel_tests.sh
+
+# Run all tests: unit tests + integration tests + split tests + cancel tests
+test_all_internal: test_unit test_integration test_split test_cancel
 	@echo "All tests completed!"
 
 # Alias for convenience
