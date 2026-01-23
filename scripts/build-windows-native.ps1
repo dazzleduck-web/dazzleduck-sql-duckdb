@@ -83,6 +83,11 @@ if (Test-Path $SrcDir) {
     Copy-Item -Path $SrcDir -Destination $ExtSourceDir -Recurse -Force
 }
 
+# Read version from version.txt
+$VersionFile = Join-Path $SourceRootDir "version.txt"
+$ExtVersion = (Get-Content $VersionFile -Raw).Trim()
+Write-Host "Extension Version: $ExtVersion" -ForegroundColor Cyan
+
 # Create extension_config.cmake that points to our extension
 $ExtConfigPath = Join-Path $ExtSourceDir "extension_config.cmake"
 # Use forward slashes for CMake compatibility
@@ -95,7 +100,7 @@ duckdb_extension_load(dazzle_duck
                       SOURCE_DIR
                       $ExtSourceDirCMake
                       LOAD_TESTS
-                      EXTENSION_VERSION "0.0.1")
+                      EXTENSION_VERSION "$ExtVersion")
 "@
 $ExtConfigContent | Out-File -FilePath $ExtConfigPath -Encoding UTF8
 
