@@ -15,10 +15,11 @@ COPY src/ ./src/
 RUN mkdir -p build/release && \
     cmake -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
+        -DEXTENSION_STATIC_BUILD=1 \
         -DDUCKDB_EXTENSION_CONFIGS="/build/extension_config.cmake" \
         -S duckdb \
         -B build/release && \
-    ninja -C build/release -j $(nproc) dazzleduck_loadable_extension
+    ninja -C build/release -j 2 dazzleduck_loadable_extension
 
 # Output location
 RUN ls -lh build/release/extension/dazzleduck/dazzleduck.duckdb_extension
