@@ -18,13 +18,13 @@ RUN mkdir -p build/release && \
         -DDUCKDB_EXTENSION_CONFIGS="/build/extension_config.cmake" \
         -S duckdb \
         -B build/release && \
-    ninja -C build/release -j $(nproc) dazzle_duck_loadable_extension
+    ninja -C build/release -j $(nproc) dazzleduck_loadable_extension
 
 # Output location
-RUN ls -lh build/release/extension/dazzle_duck/dazzle_duck.duckdb_extension
+RUN ls -lh build/release/extension/dazzleduck/dazzleduck.duckdb_extension
 
 # Copy extension to /output for easy extraction
 RUN mkdir -p /output && \
-    cp build/release/extension/dazzle_duck/dazzle_duck.duckdb_extension /output/
+    cp build/release/extension/dazzleduck/dazzleduck.duckdb_extension /output/
 
-CMD ["cat", "/output/dazzle_duck.duckdb_extension"]
+CMD ["cat", "/output/dazzleduck.duckdb_extension"]

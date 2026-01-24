@@ -18,8 +18,8 @@ This extension provides functionality to query remote Arrow IPC endpoints.
 ### From Community Extensions
 
 ```sql
-INSTALL dazzle_duck FROM community;
-LOAD dazzle_duck;
+INSTALL dazzleduck FROM community;
+LOAD dazzleduck;
 ```
 
 ### From GitHub Releases
@@ -28,37 +28,37 @@ Download the extension for your platform from [GitHub Releases](https://github.c
 
 | Platform | File |
 |----------|------|
-| Mac ARM64 (Apple Silicon) | `dazzle_duck.darwin_arm64.duckdb_extension` |
-| Linux x86_64 | `dazzle_duck.linux_amd64.duckdb_extension` |
+| Mac ARM64 (Apple Silicon) | `dazzleduck.darwin_arm64.duckdb_extension` |
+| Linux x86_64 | `dazzleduck.linux_amd64.duckdb_extension` |
 
 Then load it in DuckDB:
 
 ```sql
 -- Load from downloaded file
-LOAD '/path/to/dazzle_duck.duckdb_extension';
+LOAD '/path/to/dazzleduck.duckdb_extension';
 
 -- Verify installation
-SELECT * FROM duckdb_extensions() WHERE extension_name = 'dazzle_duck';
+SELECT * FROM duckdb_extensions() WHERE extension_name = 'dazzleduck';
 ```
 
 **Example (Mac):**
 ```bash
 # Download
-curl -L -o dazzle_duck.duckdb_extension \
-  "https://github.com/dazzleduck-web/dazzleduck-sql-duckdb/releases/latest/download/dazzle_duck.darwin_arm64.duckdb_extension"
+curl -L -o dazzleduck.duckdb_extension \
+  "https://github.com/dazzleduck-web/dazzleduck-sql-duckdb/releases/latest/download/dazzleduck.darwin_arm64.duckdb_extension"
 
 # Use in DuckDB
-duckdb -c "LOAD 'dazzle_duck.duckdb_extension'; SELECT dd_version();"
+duckdb -c "LOAD 'dazzleduck.duckdb_extension'; SELECT dd_version();"
 ```
 
 **Example (Linux):**
 ```bash
 # Download
-curl -L -o dazzle_duck.duckdb_extension \
-  "https://github.com/dazzleduck-web/dazzleduck-sql-duckdb/releases/latest/download/dazzle_duck.linux_amd64.duckdb_extension"
+curl -L -o dazzleduck.duckdb_extension \
+  "https://github.com/dazzleduck-web/dazzleduck-sql-duckdb/releases/latest/download/dazzleduck.linux_amd64.duckdb_extension"
 
 # Use in DuckDB
-duckdb -c "LOAD 'dazzle_duck.duckdb_extension'; SELECT dd_version();"
+duckdb -c "LOAD 'dazzleduck.duckdb_extension'; SELECT dd_version();"
 ```
 
 ## Usage
@@ -247,7 +247,7 @@ make
 Build outputs:
 - `./build/release/duckdb` - DuckDB shell with extension loaded
 - `./build/release/test/unittest` - Test runner
-- `./build/release/extension/dazzle_duck/dazzle_duck.duckdb_extension` - Loadable extension
+- `./build/release/extension/dazzleduck/dazzleduck.duckdb_extension` - Loadable extension
 
 ## Running Tests
 
@@ -261,7 +261,7 @@ Run all unit tests (no external dependencies):
 Run specific test files:
 ```bash
 # Test the main extension
-./build/release/test/unittest --test-dir . "*dazzle_duck*"
+./build/release/test/unittest --test-dir . "*dazzleduck*"
 
 # Test dd_read_arrow function
 ./build/release/test/unittest --test-dir . "*dd_read_arrow*"

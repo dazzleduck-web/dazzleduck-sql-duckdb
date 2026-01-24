@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
-//                         DuckDB - dazzle_duck
+//                         DuckDB - dazzleduck
 //
-// dazzle_duck_extension.hpp
+// dazzleduck_extension.hpp
 //
 //
 //===----------------------------------------------------------------------===//
@@ -13,7 +13,7 @@
 
 namespace duckdb {
 
-class DazzleDuckExtension : public Extension {
+class DazzleduckExtension : public Extension {
  public:
   void Load(ExtensionLoader& db) override;
   std::string Name() override;

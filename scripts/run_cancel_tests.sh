@@ -117,7 +117,7 @@ echo -e "${YELLOW}Initial cancelled statements count: ${CANCELLED_BEFORE:-0}${NC
 
 # Create a SQL script that runs a slow query
 cat > /tmp/cancel_test.sql << 'EOF'
-LOAD 'build/release/extension/dazzle_duck/dazzle_duck.duckdb_extension';
+LOAD 'build/release/extension/dazzleduck/dazzleduck.duckdb_extension';
 SELECT COUNT(*) FROM dd_read_arrow('http://localhost:8083', sql := 'SELECT * FROM generate_series(1, 10000000) t(x) CROSS JOIN generate_series(1, 100) s(y)');
 EOF
 

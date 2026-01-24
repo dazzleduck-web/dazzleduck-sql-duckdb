@@ -5,14 +5,15 @@ EXT_NAME=nanoarrow
 EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 
 # Define test target BEFORE include to take precedence
+# Default test runs unit tests only (no Docker dependencies)
 .PHONY: test
-test: test_all_internal
+test: test_unit
 
 # Include the Makefile from extension-ci-tools
 include extension-ci-tools/makefiles/duckdb_extension.Makefile
 
-# Override test_release_internal to run our full test suite instead of just unittest
-test_release_internal: test_all_internal
+# Override test_release_internal to run unit tests only (no Docker dependencies)
+test_release_internal: test_unit
 	@true
 
 # Client tests

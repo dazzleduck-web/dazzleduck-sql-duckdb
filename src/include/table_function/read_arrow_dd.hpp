@@ -1,5 +1,5 @@
 //===----------------------------------------------------------------------===//
-//                         DuckDB - dazzle_duck
+//                         DuckDB - dazzleduck
 //
 // table_function/read_arrow_dd.hpp
 //

@@ -7,7 +7,7 @@
 #
 # Run this test with: ./build/release/test/unittest --test-dir . "*dd_read_arrow_integration*"
 
-require dazzle_duck
+require dazzleduck
 
 # Test basic SQL query - SELECT literal values
 query III

@@ -28,7 +28,7 @@ $SourceRootDir = Split-Path -Parent $ScriptDir
 
 # Build in a native Windows directory
 $BuildRoot = "C:\duckdb-build"
-$BuildDir = Join-Path $BuildRoot "dazzle_duck"
+$BuildDir = Join-Path $BuildRoot "dazzleduck"
 $DuckDBDir = Join-Path $BuildDir "duckdb"
 $ExtSourceDir = Join-Path $BuildDir "ext_source"
 
@@ -96,7 +96,7 @@ $ExtConfigContent = @"
 # This file is included by DuckDB's build system. It specifies which extension to load
 
 # Extension from this repo
-duckdb_extension_load(dazzle_duck
+duckdb_extension_load(dazzleduck
                       SOURCE_DIR
                       $ExtSourceDirCMake
                       LOAD_TESTS
@@ -127,7 +127,7 @@ cmake -G Ninja ^
 if errorlevel 1 exit /b 1
 
 echo Building extension...
-ninja -C release dazzle_duck_loadable_extension
+ninja -C release dazzleduck_loadable_extension
 
 if errorlevel 1 exit /b 1
 
@@ -149,13 +149,13 @@ if ($BuildExitCode -ne 0) {
 }
 
 # Copy extension to output (back to WSL path)
-$ExtensionPath = Join-Path $BuildDir "release\extension\dazzle_duck\dazzle_duck.duckdb_extension"
+$ExtensionPath = Join-Path $BuildDir "release\extension\dazzleduck\dazzleduck.duckdb_extension"
 if (Test-Path $ExtensionPath) {
     # Create output dir in source
     $OutputDir = Join-Path $SourceRootDir "dist\$DuckDBVersion"
     New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
-    $OutputFile = Join-Path $OutputDir "dazzle_duck.windows_amd64.duckdb_extension"
+    $OutputFile = Join-Path $OutputDir "dazzleduck.windows_amd64.duckdb_extension"
     Copy-Item $ExtensionPath $OutputFile -Force
     Write-Host "Extension copied to: $OutputFile" -ForegroundColor Green
     Get-Item $OutputFile | Select-Object Name, Length

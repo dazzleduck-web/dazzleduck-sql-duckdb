@@ -40,9 +40,9 @@ build_extension() {
 
     # Extract the extension
     mkdir -p dist/v1.4.3
-    docker run --rm --platform "$PLATFORM" "$EXT_IMAGE" > dist/v1.4.3/dazzle_duck.linux_amd64.duckdb_extension
-    echo "Extension extracted to: dist/v1.4.3/dazzle_duck.linux_amd64.duckdb_extension"
-    ls -lh dist/v1.4.3/dazzle_duck.linux_amd64.duckdb_extension
+    docker run --rm --platform "$PLATFORM" "$EXT_IMAGE" > dist/v1.4.3/dazzleduck.linux_amd64.duckdb_extension
+    echo "Extension extracted to: dist/v1.4.3/dazzleduck.linux_amd64.duckdb_extension"
+    ls -lh dist/v1.4.3/dazzleduck.linux_amd64.duckdb_extension
 }
 
 case "${1:-}" in

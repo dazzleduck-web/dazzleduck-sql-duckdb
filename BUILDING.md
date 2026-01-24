@@ -1,6 +1,6 @@
 # Building the Extension
 
-This document describes how to build the dazzle_duck extension for different platforms.
+This document describes how to build the dazzleduck extension for different platforms.
 
 ## Quick Start
 
@@ -79,7 +79,7 @@ winget install Git.Git
 ./scripts/build-windows.sh --clean
 ```
 
-Output: `dist/v1.4.3/dazzle_duck.windows_amd64.duckdb_extension`
+Output: `dist/v1.4.3/dazzleduck.windows_amd64.duckdb_extension`
 
 The build uses `C:\duckdb-build\` as the working directory on Windows.
 
@@ -118,7 +118,7 @@ Docker builds are available for Linux cross-compilation.
 ./docker/build-linux.sh --all
 ```
 
-Output: `dist/v1.4.3/dazzle_duck.linux_amd64.duckdb_extension`
+Output: `dist/v1.4.3/dazzleduck.linux_amd64.duckdb_extension`
 
 ### Build All Platforms
 
@@ -138,7 +138,7 @@ ls -la dist/v1.4.3/
 After building, find the extension at:
 
 ```
-build/release/extension/dazzle_duck/dazzle_duck.duckdb_extension
+build/release/extension/dazzleduck/dazzleduck.duckdb_extension
 ```
 
 The DuckDB CLI with the extension built-in:
@@ -155,7 +155,7 @@ build/release/duckdb.exe      # Windows
 make test
 
 # Or run specific tests
-./build/release/test/unittest "*dazzle_duck*"
+./build/release/test/unittest "*dazzleduck*"
 ./build/release/test/unittest "*array_contains_all*"
 ./build/release/test/unittest "*bloom_filter*"
 ```
@@ -176,7 +176,7 @@ To load the extension into a standard DuckDB installation:
 
 ```sql
 -- Load from file
-LOAD '/path/to/dazzle_duck.duckdb_extension';
+LOAD '/path/to/dazzleduck.duckdb_extension';
 
 -- Verify
 SELECT dd_version();

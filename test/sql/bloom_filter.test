@@ -2,7 +2,7 @@
 # description: test bloom filter scalar functions
 # group: [sql]
 
-require dazzle_duck
+require dazzleduck
 
 # Test dd_bloom_filter_create - basic case
 query I

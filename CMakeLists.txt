@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5)
 include(FetchContent)
 
 # Set extension name here
-set(TARGET_NAME dazzle_duck)
+set(TARGET_NAME dazzleduck)
 set(EXTENSION_VERSION "0.0.2")
 
 set(NANOARROW_IPC ON)
@@ -34,7 +34,7 @@ set(EXTENSION_SOURCES
     src/scalar_function/dd_search.cpp
     src/scanner/read_arrow_dd.cpp
     src/table_function/dd_splits.cpp
-    src/dazzle_duck_extension.cpp)
+    src/dazzleduck_extension.cpp)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
@@ -45,8 +45,8 @@ target_link_libraries(${LOADABLE_EXTENSION_NAME} nanoarrow::nanoarrow
                       nanoarrow::nanoarrow_ipc)
 
 # Set extension version macro
-target_compile_definitions(${EXTENSION_NAME} PRIVATE EXT_VERSION_DAZZLE_DUCK="${EXTENSION_VERSION}")
-target_compile_definitions(${LOADABLE_EXTENSION_NAME} PRIVATE EXT_VERSION_DAZZLE_DUCK="${EXTENSION_VERSION}")
+target_compile_definitions(${EXTENSION_NAME} PRIVATE EXT_VERSION_DAZZLEDUCK="${EXTENSION_VERSION}")
+target_compile_definitions(${LOADABLE_EXTENSION_NAME} PRIVATE EXT_VERSION_DAZZLEDUCK="${EXTENSION_VERSION}")
 
 install(TARGETS ${EXTENSION_NAME}
         EXPORT "${DUCKDB_EXPORT_SET}"

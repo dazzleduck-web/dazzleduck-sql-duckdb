@@ -1,5 +1,5 @@
 extension:
-  name: dazzle_duck
+  name: dazzleduck
   description: Arrow IPC over HTTP client with array functions and bloom filters
   version: 0.0.2
   language: C++

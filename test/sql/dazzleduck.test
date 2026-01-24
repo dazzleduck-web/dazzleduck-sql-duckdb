@@ -1,5 +1,5 @@
-# name: test/sql/dazzle_duck.test
-# description: test dazzle_duck extension
+# name: test/sql/dazzleduck.test
+# description: test dazzleduck extension
 # group: [sql]
 
 # Before we load the extension, this will fail
@@ -9,7 +9,7 @@ SELECT dd_version();
 Catalog Error: Scalar Function with name dd_version does not exist!
 
 # Require statement will ensure this test is run with this extension loaded
-require dazzle_duck
+require dazzleduck
 
 # Confirm the extension works
 query I

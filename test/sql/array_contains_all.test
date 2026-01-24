@@ -2,7 +2,7 @@
 # description: test dd_array_contains_all scalar function
 # group: [sql]
 
-require dazzle_duck
+require dazzleduck
 
 # Test basic case - all elements exist
 query I

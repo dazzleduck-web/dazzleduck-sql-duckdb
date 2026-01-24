@@ -3,7 +3,7 @@
 # group: [sql]
 
 # Require statement will ensure this test is run with this extension loaded
-require dazzle_duck
+require dazzleduck
 
 # Clear default HTTP skip behavior for parameter validation tests
 # These tests fail at parameter validation, before any HTTP calls

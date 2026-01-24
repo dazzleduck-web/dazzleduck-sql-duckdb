@@ -1,4 +1,4 @@
-#include "dazzle_duck_extension.hpp"
+#include "dazzleduck_extension.hpp"
 
 #include <string>
 
@@ -25,8 +25,8 @@ struct DazzleDuckVersion {
   }
 
   static void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
-#ifdef EXT_VERSION_DAZZLE_DUCK
-    result.SetValue(0, StringVector::AddString(result, EXT_VERSION_DAZZLE_DUCK));
+#ifdef EXT_VERSION_DAZZLEDUCK
+    result.SetValue(0, StringVector::AddString(result, EXT_VERSION_DAZZLEDUCK));
 #else
     result.SetValue(0, StringVector::AddString(result, "dev"));
 #endif
@@ -46,13 +46,13 @@ void LoadInternal(ExtensionLoader& loader) {
 
 }  // namespace
 
-void DazzleDuckExtension::Load(ExtensionLoader& loader) { LoadInternal(loader); }
+void DazzleduckExtension::Load(ExtensionLoader& loader) { LoadInternal(loader); }
 
-std::string DazzleDuckExtension::Name() { return "dazzle_duck"; }
+std::string DazzleduckExtension::Name() { return "dazzleduck"; }
 
-std::string DazzleDuckExtension::Version() const {
-#ifdef EXT_VERSION_DAZZLE_DUCK
-  return EXT_VERSION_DAZZLE_DUCK;
+std::string DazzleduckExtension::Version() const {
+#ifdef EXT_VERSION_DAZZLEDUCK
+  return EXT_VERSION_DAZZLEDUCK;
 #else
   return "";
 #endif
@@ -61,5 +61,5 @@ std::string DazzleDuckExtension::Version() const {
 }  // namespace duckdb
 
 extern "C" {
-DUCKDB_CPP_EXTENSION_ENTRY(dazzle_duck, loader) { duckdb::LoadInternal(loader); }
+DUCKDB_CPP_EXTENSION_ENTRY(dazzleduck, loader) { duckdb::LoadInternal(loader); }
 }

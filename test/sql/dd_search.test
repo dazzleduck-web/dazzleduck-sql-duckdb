@@ -2,7 +2,7 @@
 # description: test dd_search scalar function
 # group: [sql]
 
-require dazzle_duck
+require dazzleduck
 
 # Test dd_search with integer column and integer list
 query I
