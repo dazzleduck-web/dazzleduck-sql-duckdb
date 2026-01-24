@@ -3,7 +3,7 @@ include(FetchContent)
 
 # Set extension name here
 set(TARGET_NAME dazzleduck)
-set(EXTENSION_VERSION "0.0.2")
+set(EXTENSION_VERSION "0.0.3")
 
 set(NANOARROW_IPC ON)
 set(NANOARROW_NAMESPACE "DuckDBExt${TARGET_NAME}")
