@@ -1,16 +1,18 @@
 extension:
   name: dazzleduck
   description: Arrow IPC over HTTP client with array functions and bloom filters
-  version: 0.0.3
+  version: 0.0.4
   language: C++
   build: cmake
   license: Apache-2.0
   maintainers:
     - dazzleduck-web
+  requires:
+    duckdb: ">=1.4.4"
 
 repo:
   github: dazzleduck-web/dazzleduck-sql-duckdb
-  ref: v0.0.3
+  ref: v0.0.4
 
 docs:
   hello_world: |

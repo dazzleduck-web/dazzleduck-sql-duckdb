@@ -6,7 +6,7 @@
 set -e
 
 CONTAINER_NAME="dazzleduck-test"
-IMAGE="dazzleduck/dazzleduck:0.0.16"
+IMAGE="dazzleduck/dazzleduck:0.0.17"
 HTTP_PORT=8081
 FLIGHT_PORT=59307
 MAX_WAIT_SECONDS=60

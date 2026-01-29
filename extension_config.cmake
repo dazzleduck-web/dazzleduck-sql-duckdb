@@ -5,7 +5,7 @@ duckdb_extension_load(dazzleduck
                       SOURCE_DIR
                       ${CMAKE_CURRENT_LIST_DIR}
                       LOAD_TESTS
-                      EXTENSION_VERSION "0.0.3"
+                      EXTENSION_VERSION "0.0.4"
                       LINKED_LIBS
                       "../../_deps/nanoarrow-build/lib*.a")
 

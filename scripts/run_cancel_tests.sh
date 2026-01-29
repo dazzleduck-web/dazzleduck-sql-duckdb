@@ -11,7 +11,7 @@
 set -e
 
 CONTAINER_NAME="dazzleduck-cancel-test"
-IMAGE="dazzleduck/dazzleduck:0.0.16"
+IMAGE="dazzleduck/dazzleduck:0.0.17"
 HTTP_PORT=8083
 FLIGHT_PORT=59309
 MAX_WAIT_SECONDS=60
