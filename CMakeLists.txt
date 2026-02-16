@@ -28,6 +28,7 @@ set(EXTENSION_SOURCES
     src/ipc/stream_factory.cpp
     src/ipc/stream_reader/base_stream_reader.cpp
     src/ipc/stream_reader/ipc_buffer_stream_reader.cpp
+    src/optimizer/aggregation_pushdown.cpp
     src/scalar_function/array_contains_all.cpp
     src/scalar_function/bloom_filter.cpp
     src/scalar_function/dd_login.cpp

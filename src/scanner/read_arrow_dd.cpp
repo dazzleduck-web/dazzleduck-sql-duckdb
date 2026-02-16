@@ -4,7 +4,6 @@
 #include "http/cancel_monitor.hpp"
 #include "http/split_info.hpp"
 #include "ipc/http_stream_factory.hpp"
-#include "table_function/arrow_ipc_function_data.hpp"
 
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/function/table/arrow/arrow_duck_schema.hpp"
@@ -14,6 +13,7 @@
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/common/types/decimal.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
 
 #include <random>
@@ -24,26 +24,6 @@ namespace ext_nanoarrow {
 //===----------------------------------------------------------------------===//
 // Split Mode Data Structures
 //===----------------------------------------------------------------------===//
-
-//! Extended function data that stores parameters for pushdown query construction
-struct ReadArrowDDFunctionData : public ArrowIPCFunctionData {
-  ReadArrowDDFunctionData(std::unique_ptr<ArrowIPCStreamFactory> factory, string url,
-                              string original_query, vector<string> column_names,
-                              string auth_token = "")
-      : ArrowIPCFunctionData(std::move(factory)),
-        url(std::move(url)),
-        original_query(std::move(original_query)),
-        column_names(std::move(column_names)),
-        auth_token(std::move(auth_token)) {}
-
-  string url;
-  string original_query;
-  vector<string> column_names;
-  string auth_token;  //! JWT auth token for Authorization header
-  bool split_mode = false;  //! Whether to use split mode for parallel execution
-  int64_t split_size = -1;  //! Split size hint for plan API (-1 means not specified)
-  int64_t query_id = -1;  //! Generated query ID for non-split mode cancellation
-};
 
 //! Custom global state for parallel split execution
 struct ReadArrowDDGlobalState : public GlobalTableFunctionState {
@@ -70,6 +50,18 @@ struct ReadArrowDDGlobalState : public GlobalTableFunctionState {
 
   //! Mutex for split access (used for initialization)
   mutex split_mutex;
+
+  //! Whether aggregation pushdown is active (custom scan path needed)
+  bool aggregation_mode = false;
+
+  //! Expected output types (from optimizer, e.g., HUGEINT for sum)
+  vector<LogicalType> agg_output_types;
+
+  //! Arrow stream for aggregation mode
+  unique_ptr<ArrowArrayStreamWrapper> agg_stream;
+
+  //! Whether aggregation result has been consumed
+  bool agg_done = false;
 
   //! For non-split mode: the underlying ArrowScanGlobalState
   unique_ptr<GlobalTableFunctionState> arrow_global_state;
@@ -402,13 +394,21 @@ struct ReadArrowDDFunction : ArrowTableFunction {
                                                          TableFunctionInitInput& input) {
     auto& data = input.bind_data->Cast<ReadArrowDDFunctionData>();
 
+    // Check if the optimizer has set an aggregation pushdown query
+    bool has_aggregation_pushdown = !data.aggregation_pushdown_query.empty();
+
     // Check if we have projections or filters to push down to the server
-    bool has_projection = input.column_ids.size() < data.column_names.size();
-    bool has_filters = input.filters && !input.filters->filters.empty();
+    bool has_projection = !has_aggregation_pushdown &&
+                          input.column_ids.size() < data.column_names.size();
+    bool has_filters = !has_aggregation_pushdown &&
+                       input.filters && !input.filters->filters.empty();
 
     // Build pushdown query if needed
     string pushdown_query = data.original_query;
-    if (has_projection || has_filters) {
+    if (has_aggregation_pushdown) {
+      // Use the optimizer-generated aggregation pushdown query directly
+      pushdown_query = data.aggregation_pushdown_query;
+    } else if (has_projection || has_filters) {
       pushdown_query =
           BuildPushdownQuery(data.original_query, data.column_names, input.column_ids, input.filters);
     }
@@ -422,6 +422,13 @@ struct ReadArrowDDFunction : ArrowTableFunction {
       result->split_size = data.split_size;
       result->context = &context;
       result->column_ids = input.column_ids;
+
+      // If we have aggregation pushdown in split mode, set aggregation mode
+      // and store expected output types for custom type conversion
+      if (has_aggregation_pushdown) {
+        result->aggregation_mode = true;
+        result->agg_output_types = data.all_types;
+      }
 
       // Build scanned types based on column IDs
       for (auto col_id : input.column_ids) {
@@ -470,7 +477,7 @@ struct ReadArrowDDFunction : ArrowTableFunction {
     // Generate a new query ID if we have pushdown (query changes), otherwise use the one from Bind
     int64_t query_id = data.query_id;
 
-    if (has_projection || has_filters) {
+    if (has_aggregation_pushdown || has_projection || has_filters) {
       // Generate new query ID for the modified query
       std::random_device rd;
       std::mt19937_64 gen(rd());
@@ -491,7 +498,7 @@ struct ReadArrowDDFunction : ArrowTableFunction {
       mutable_data.stream_factory_ptr = reinterpret_cast<uintptr_t>(mutable_data.factory.get());
     }
 
-    // Create our wrapper global state that holds the arrow global state
+    // Create our wrapper global state
     auto result = make_uniq<ReadArrowDDGlobalState>();
     result->split_mode = false;
     result->url = data.url;
@@ -501,7 +508,23 @@ struct ReadArrowDDFunction : ArrowTableFunction {
     // Register query ID with cancel guard for non-split mode
     result->cancel_guard.AddQuery(&context, data.url, data.auth_token, query_id);
 
-    result->arrow_global_state = ArrowScanInitGlobal(context, input);
+    if (has_aggregation_pushdown) {
+      // Aggregation pushdown: use custom scan path to handle type mismatches
+      // (e.g., DuckDB's HUGEINT for sum() vs Arrow's DECIMAL(38,0))
+      result->aggregation_mode = true;
+      result->agg_output_types = data.all_types;
+
+      // Create the Arrow stream from the factory
+      ArrowStreamParameters params;
+      result->agg_stream = ArrowIPCStreamFactory::Produce(
+          reinterpret_cast<uintptr_t>(data.factory.get()), params);
+
+      // Consume the schema from the stream
+      ArrowSchemaWrapper schema;
+      result->agg_stream->GetSchema(schema);
+    } else {
+      result->arrow_global_state = ArrowScanInitGlobal(context, input);
+    }
     return std::move(result);
   }
 
@@ -528,8 +551,201 @@ struct ReadArrowDDFunction : ArrowTableFunction {
       return std::move(local_state);
     }
 
+    if (global_state.aggregation_mode) {
+      // Aggregation mode: use a simple local state (single-threaded, typically 1 row)
+      auto local_state = make_uniq<ReadArrowDDLocalState>();
+      local_state->context = &context.client;
+      return std::move(local_state);
+    }
+
     // Non-split mode: use standard Arrow local state
     return ArrowScanInitLocal(context, input, global_state.arrow_global_state.get());
+  }
+
+  //! Helper function: Convert Arrow aggregation result column to DuckDB vector
+  //! Handles type mismatches between Arrow IPC format and DuckDB internal representation
+  //! (e.g., Arrow Decimal128 vs DuckDB DECIMAL with variable internal storage)
+  static void ConvertAggregationColumn(ArrowArray& arrow_array, Vector& out_vec,
+                                        const LogicalType& expected_type, idx_t row_count) {
+    auto& validity = FlatVector::Validity(out_vec);
+
+    // Helper lambda: check Arrow validity bitmap for a given row
+    // Must account for arrow_array.offset when indexing into the bitmap
+    auto is_null = [&](idx_t i) -> bool {
+      if (arrow_array.null_count > 0 && arrow_array.buffers[0]) {
+        auto* validity_bits = reinterpret_cast<const uint8_t*>(arrow_array.buffers[0]);
+        auto bit_idx = i + arrow_array.offset;
+        return !(validity_bits[bit_idx / 8] & (1 << (bit_idx % 8)));
+      }
+      return false;
+    };
+
+    // HUGEINT: Arrow sends as Decimal128 (16 bytes), same layout as hugeint_t
+    if (expected_type.id() == LogicalTypeId::HUGEINT) {
+      auto* out_data = FlatVector::GetData<hugeint_t>(out_vec);
+      auto* raw_data = reinterpret_cast<const hugeint_t*>(arrow_array.buffers[1]);
+      for (idx_t i = 0; i < row_count; i++) {
+        if (is_null(i)) { validity.SetInvalid(i); continue; }
+        out_data[i] = raw_data[i + arrow_array.offset];
+      }
+    }
+    // DECIMAL: Arrow always sends as Decimal128 (16 bytes).
+    // DuckDB stores DECIMAL internally as int16/int32/int64/hugeint depending on width.
+    // SUM(DECIMAL) returns DECIMAL(38,s) which uses hugeint_t internally.
+    // MIN/MAX(DECIMAL) preserves the original type, which may use a smaller internal type.
+    else if (expected_type.id() == LogicalTypeId::DECIMAL) {
+      auto width = DecimalType::GetWidth(expected_type);
+      auto* raw_data = reinterpret_cast<const hugeint_t*>(arrow_array.buffers[1]);
+      if (width <= Decimal::MAX_WIDTH_INT16) {
+        auto* out_data = FlatVector::GetData<int16_t>(out_vec);
+        for (idx_t i = 0; i < row_count; i++) {
+          if (is_null(i)) { validity.SetInvalid(i); continue; }
+          out_data[i] = static_cast<int16_t>(raw_data[i + arrow_array.offset].lower);
+        }
+      } else if (width <= Decimal::MAX_WIDTH_INT32) {
+        auto* out_data = FlatVector::GetData<int32_t>(out_vec);
+        for (idx_t i = 0; i < row_count; i++) {
+          if (is_null(i)) { validity.SetInvalid(i); continue; }
+          out_data[i] = static_cast<int32_t>(raw_data[i + arrow_array.offset].lower);
+        }
+      } else if (width <= Decimal::MAX_WIDTH_INT64) {
+        auto* out_data = FlatVector::GetData<int64_t>(out_vec);
+        for (idx_t i = 0; i < row_count; i++) {
+          if (is_null(i)) { validity.SetInvalid(i); continue; }
+          out_data[i] = static_cast<int64_t>(raw_data[i + arrow_array.offset].lower);
+        }
+      } else {
+        // width <= 38: hugeint_t, same layout as Decimal128
+        auto* out_data = FlatVector::GetData<hugeint_t>(out_vec);
+        for (idx_t i = 0; i < row_count; i++) {
+          if (is_null(i)) { validity.SetInvalid(i); continue; }
+          out_data[i] = raw_data[i + arrow_array.offset];
+        }
+      }
+    }
+    // BIGINT: Arrow sends as int64
+    else if (expected_type.id() == LogicalTypeId::BIGINT) {
+      auto* out_data = FlatVector::GetData<int64_t>(out_vec);
+      auto* raw_data = reinterpret_cast<const int64_t*>(arrow_array.buffers[1]);
+      for (idx_t i = 0; i < row_count; i++) {
+        if (is_null(i)) { validity.SetInvalid(i); continue; }
+        out_data[i] = raw_data[i + arrow_array.offset];
+      }
+    }
+    // DOUBLE: Arrow sends as float64
+    else if (expected_type.id() == LogicalTypeId::DOUBLE) {
+      auto* out_data = FlatVector::GetData<double>(out_vec);
+      auto* raw_data = reinterpret_cast<const double*>(arrow_array.buffers[1]);
+      for (idx_t i = 0; i < row_count; i++) {
+        if (is_null(i)) { validity.SetInvalid(i); continue; }
+        out_data[i] = raw_data[i + arrow_array.offset];
+      }
+    }
+    // FLOAT: Arrow sends as float32
+    else if (expected_type.id() == LogicalTypeId::FLOAT) {
+      auto* out_data = FlatVector::GetData<float>(out_vec);
+      auto* raw_data = reinterpret_cast<const float*>(arrow_array.buffers[1]);
+      for (idx_t i = 0; i < row_count; i++) {
+        if (is_null(i)) { validity.SetInvalid(i); continue; }
+        out_data[i] = raw_data[i + arrow_array.offset];
+      }
+    }
+    // INTEGER: Arrow sends as int32
+    else if (expected_type.id() == LogicalTypeId::INTEGER) {
+      auto* out_data = FlatVector::GetData<int32_t>(out_vec);
+      auto* raw_data = reinterpret_cast<const int32_t*>(arrow_array.buffers[1]);
+      for (idx_t i = 0; i < row_count; i++) {
+        if (is_null(i)) { validity.SetInvalid(i); continue; }
+        out_data[i] = raw_data[i + arrow_array.offset];
+      }
+    }
+    // SMALLINT: Arrow sends as int16
+    else if (expected_type.id() == LogicalTypeId::SMALLINT) {
+      auto* out_data = FlatVector::GetData<int16_t>(out_vec);
+      auto* raw_data = reinterpret_cast<const int16_t*>(arrow_array.buffers[1]);
+      for (idx_t i = 0; i < row_count; i++) {
+        if (is_null(i)) { validity.SetInvalid(i); continue; }
+        out_data[i] = raw_data[i + arrow_array.offset];
+      }
+    }
+    // TINYINT: Arrow sends as int8
+    else if (expected_type.id() == LogicalTypeId::TINYINT) {
+      auto* out_data = FlatVector::GetData<int8_t>(out_vec);
+      auto* raw_data = reinterpret_cast<const int8_t*>(arrow_array.buffers[1]);
+      for (idx_t i = 0; i < row_count; i++) {
+        if (is_null(i)) { validity.SetInvalid(i); continue; }
+        out_data[i] = raw_data[i + arrow_array.offset];
+      }
+    }
+    // VARCHAR: Arrow string array (offsets + data buffers)
+    else if (expected_type.id() == LogicalTypeId::VARCHAR) {
+      auto* out_data = FlatVector::GetData<string_t>(out_vec);
+      auto* offsets = reinterpret_cast<const int32_t*>(arrow_array.buffers[1]);
+      auto* str_data = reinterpret_cast<const char*>(arrow_array.buffers[2]);
+      for (idx_t i = 0; i < row_count; i++) {
+        if (is_null(i)) { validity.SetInvalid(i); continue; }
+        auto idx = i + arrow_array.offset;
+        auto len = offsets[idx + 1] - offsets[idx];
+        out_data[i] = StringVector::AddString(out_vec, str_data + offsets[idx], len);
+      }
+    }
+    else {
+      throw IOException("Aggregation pushdown: unsupported result type %s",
+                        expected_type.ToString());
+    }
+  }
+
+  //! Scan function for aggregation pushdown mode
+  //! Reads pre-aggregated Arrow data and casts to expected DuckDB types
+  static void AggregationScanFunction(ClientContext& context, TableFunctionInput& data,
+                                       DataChunk& output) {
+    auto& global_state = data.global_state->Cast<ReadArrowDDGlobalState>();
+
+    if (global_state.agg_done) {
+      output.SetCardinality(0);
+      return;
+    }
+
+    auto& stream = global_state.agg_stream;
+    if (!stream) {
+      output.SetCardinality(0);
+      global_state.agg_done = true;
+      return;
+    }
+
+    auto chunk = stream->GetNextChunk();
+    auto error = stream->GetError();
+    if (error && strlen(error) > 0) {
+      throw IOException("Failed to read Arrow chunk: %s", error);
+    }
+
+    if (!chunk || chunk->arrow_array.length == 0) {
+      output.SetCardinality(0);
+      global_state.agg_done = true;
+      return;
+    }
+
+    idx_t row_count = chunk->arrow_array.length;
+    output.SetCardinality(row_count);
+
+    // Convert each column from Arrow data to the expected output types.
+    // Arrow IPC may use different physical types than DuckDB expects internally
+    // (e.g., Arrow Decimal128 for DuckDB HUGEINT, or Decimal128 for DECIMAL of any width).
+    if (static_cast<idx_t>(chunk->arrow_array.n_children) < global_state.agg_output_types.size()) {
+      throw IOException("Aggregation pushdown: Arrow result has %d columns but expected %d",
+                        chunk->arrow_array.n_children, global_state.agg_output_types.size());
+    }
+    for (idx_t col_idx = 0; col_idx < global_state.agg_output_types.size(); col_idx++) {
+      auto& arrow_array = *chunk->arrow_array.children[col_idx];
+      auto& out_vec = output.data[col_idx];
+      auto& expected_type = global_state.agg_output_types[col_idx];
+      ConvertAggregationColumn(arrow_array, out_vec, expected_type, row_count);
+    }
+
+    output.Verify();
+    // Note: aggregation results are typically 1 batch, but we don't force
+    // agg_done here — the next call will read the next batch (or get length 0
+    // and set agg_done then). This supports multi-batch results correctly.
   }
 
   //! Scan function for split mode - processes splits in parallel
@@ -589,27 +805,45 @@ struct ReadArrowDDFunction : ArrowTableFunction {
       // Convert each column
       auto& arrow_schema = chunk->arrow_array;
       auto& columns = bind_data.arrow_table.GetColumns();
-      for (idx_t col_idx = 0; col_idx < local_state.column_ids.size(); col_idx++) {
-        auto arrow_col_idx = local_state.column_ids[col_idx];
-        if (arrow_col_idx == COLUMN_IDENTIFIER_ROW_ID) {
-          continue;
-        }
 
-        // In split mode, columns are already projected by the server query
-        // so we use sequential indexing into the returned data
-        auto& arrow_array = *arrow_schema.children[col_idx];
-        auto& out_vec = local_state.all_columns.data[col_idx];
-        auto& array_state = local_state.GetState(col_idx, context);
-        array_state.owned_data = local_state.current_chunk;
-
-        auto col_it = columns.find(arrow_col_idx);
-        if (col_it == columns.end()) {
-          throw InternalException("Column %llu not found in arrow table schema", arrow_col_idx);
+      // Check if we're in aggregation mode (aggregation pushdown with split mode)
+      if (global_state.aggregation_mode) {
+        // Use custom conversion for aggregation results to handle type mismatches
+        // (e.g., Arrow Decimal128 vs DuckDB DECIMAL with variable internal storage)
+        if (static_cast<idx_t>(chunk->arrow_array.n_children) < global_state.agg_output_types.size()) {
+          throw IOException("Split aggregation pushdown: Arrow result has %d columns but expected %d",
+                            chunk->arrow_array.n_children, global_state.agg_output_types.size());
         }
-        auto& arrow_type = *col_it->second;
-        ArrowToDuckDBConversion::ColumnArrowToDuckDB(
-            out_vec, arrow_array, local_state.chunk_offset, array_state,
-            output_size, arrow_type);
+        for (idx_t col_idx = 0; col_idx < global_state.agg_output_types.size(); col_idx++) {
+          auto& arrow_array = *arrow_schema.children[col_idx];
+          auto& out_vec = local_state.all_columns.data[col_idx];
+          auto& expected_type = global_state.agg_output_types[col_idx];
+          ConvertAggregationColumn(arrow_array, out_vec, expected_type, output_size);
+        }
+      } else {
+        // Standard split mode: use DuckDB's standard Arrow conversion
+        for (idx_t col_idx = 0; col_idx < local_state.column_ids.size(); col_idx++) {
+          auto arrow_col_idx = local_state.column_ids[col_idx];
+          if (arrow_col_idx == COLUMN_IDENTIFIER_ROW_ID) {
+            continue;
+          }
+
+          // In split mode, columns are already projected by the server query
+          // so we use sequential indexing into the returned data
+          auto& arrow_array = *arrow_schema.children[col_idx];
+          auto& out_vec = local_state.all_columns.data[col_idx];
+          auto& array_state = local_state.GetState(col_idx, context);
+          array_state.owned_data = local_state.current_chunk;
+
+          auto col_it = columns.find(arrow_col_idx);
+          if (col_it == columns.end()) {
+            throw InternalException("Column %llu not found in arrow table schema", arrow_col_idx);
+          }
+          auto& arrow_type = *col_it->second;
+          ArrowToDuckDBConversion::ColumnArrowToDuckDB(
+              out_vec, arrow_array, local_state.chunk_offset, array_state,
+              output_size, arrow_type);
+        }
       }
 
       local_state.chunk_offset += output_size;
@@ -633,6 +867,8 @@ struct ReadArrowDDFunction : ArrowTableFunction {
 
     if (global_state.split_mode) {
       SplitScanFunction(context, data, output);
+    } else if (global_state.aggregation_mode) {
+      AggregationScanFunction(context, data, output);
     } else {
       // Non-split mode: use arrow global state for scanning
       TableFunctionInput arrow_input(data.bind_data, data.local_state,

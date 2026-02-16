@@ -1,0 +1,386 @@
+# name: test/sql/dd_read_arrow_all_types_split_comprehensive.test_slow
+# description: Comprehensive split mode test for all aggregations on all numeric data types
+# group: [sql]
+# This test requires a running dazzleduck server on localhost:8082 with demo_db.main.all_types table
+
+require dazzleduck
+
+# =============================================================================
+# Comprehensive Split Mode Aggregation Tests for All Numeric Data Types
+# Tests: SUM, MIN, MAX, COUNT on TINYINT, SMALLINT, INTEGER, BIGINT, FLOAT, DOUBLE, DECIMAL
+# =============================================================================
+
+# =============================================================================
+# SUM Aggregations - All Numeric Types
+# =============================================================================
+
+# Test: SUM on TINYINT
+query I
+SELECT sum(tiny_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+260
+
+# Test: SUM on SMALLINT
+query I
+SELECT sum(small_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+2600
+
+# Test: SUM on INTEGER
+query I
+SELECT sum(int_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+26000
+
+# Test: SUM on BIGINT
+query I
+SELECT sum(big_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+260000
+
+# Test: SUM on FLOAT (rounded to avoid floating point precision issues)
+query I
+SELECT sum(float_col)::BIGINT FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+29
+
+# Test: SUM on DOUBLE (rounded to avoid floating point precision issues)
+query I
+SELECT sum(double_col)::BIGINT FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+263
+
+# Test: SUM on DECIMAL(4,2)
+query R
+SELECT sum(decimal_small) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+284.90
+
+# Test: SUM on DECIMAL(9,3)
+query R
+SELECT sum(decimal_medium) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+2849.380
+
+# Test: SUM on DECIMAL(18,4)
+query R
+SELECT sum(decimal_large) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+28493.8380
+
+# Test: SUM on DECIMAL(38,10)
+query R
+SELECT sum(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+284938382.7284938380
+
+# =============================================================================
+# MIN Aggregations - All Numeric Types
+# =============================================================================
+
+# Test: MIN on TINYINT
+query I
+SELECT min(tiny_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-80
+
+# Test: MIN on SMALLINT
+query I
+SELECT min(small_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-800
+
+# Test: MIN on INTEGER
+query I
+SELECT min(int_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-8000
+
+# Test: MIN on BIGINT
+query I
+SELECT min(big_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-80000
+
+# Test: MIN on FLOAT
+query R
+SELECT min(float_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-8.5
+
+# Test: MIN on DOUBLE
+query R
+SELECT min(double_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-80.5
+
+# Test: MIN on DECIMAL(4,2)
+query R
+SELECT min(decimal_small) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-89.01
+
+# Test: MIN on DECIMAL(9,3)
+query R
+SELECT min(decimal_medium) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-890.123
+
+# Test: MIN on DECIMAL(18,4)
+query R
+SELECT min(decimal_large) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-8901.2345
+
+# Test: MIN on DECIMAL(38,10)
+query R
+SELECT min(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-89012345.6789012345
+
+# =============================================================================
+# MAX Aggregations - All Numeric Types
+# =============================================================================
+
+# Test: MAX on TINYINT
+query I
+SELECT max(tiny_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+100
+
+# Test: MAX on SMALLINT
+query I
+SELECT max(small_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+1000
+
+# Test: MAX on INTEGER
+query I
+SELECT max(int_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+10000
+
+# Test: MAX on BIGINT
+query I
+SELECT max(big_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+100000
+
+# Test: MAX on FLOAT
+query R
+SELECT max(float_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+10.5
+
+# Test: MAX on DOUBLE
+query R
+SELECT max(double_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+100.5
+
+# Test: MAX on DECIMAL(4,2)
+query R
+SELECT max(decimal_small) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+99.99
+
+# Test: MAX on DECIMAL(9,3)
+query R
+SELECT max(decimal_medium) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+999.999
+
+# Test: MAX on DECIMAL(18,4)
+query R
+SELECT max(decimal_large) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+9999.9999
+
+# Test: MAX on DECIMAL(38,10)
+query R
+SELECT max(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+99999999.9999999999
+
+# =============================================================================
+# COUNT Aggregations - All Numeric Types (with NULL handling)
+# =============================================================================
+
+# Test: COUNT on TINYINT (should exclude NULLs)
+query I
+SELECT count(tiny_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+8
+
+# Test: COUNT on SMALLINT (should exclude NULLs)
+query I
+SELECT count(small_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+8
+
+# Test: COUNT on INTEGER (should exclude NULLs)
+query I
+SELECT count(int_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+8
+
+# Test: COUNT on BIGINT (should exclude NULLs)
+query I
+SELECT count(big_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+8
+
+# Test: COUNT on FLOAT (should exclude NULLs)
+query I
+SELECT count(float_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+8
+
+# Test: COUNT on DOUBLE (should exclude NULLs)
+query I
+SELECT count(double_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+8
+
+# Test: COUNT on DECIMAL(4,2) (should exclude NULLs)
+query I
+SELECT count(decimal_small) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+8
+
+# Test: COUNT on DECIMAL(9,3) (should exclude NULLs)
+query I
+SELECT count(decimal_medium) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+8
+
+# Test: COUNT on DECIMAL(18,4) (should exclude NULLs)
+query I
+SELECT count(decimal_large) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+8
+
+# Test: COUNT on DECIMAL(38,10) (should exclude NULLs)
+query I
+SELECT count(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+8
+
+# =============================================================================
+# COUNT(*) - Total row count
+# =============================================================================
+
+# Test: COUNT(*) should count all rows including NULLs
+query I
+SELECT count(*) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+10
+
+# =============================================================================
+# Consistency Checks: Split vs Non-Split Mode
+# Verify that split mode produces same results as non-split mode
+# =============================================================================
+
+# Test: SUM consistency - DECIMAL(38,10)
+query T
+SELECT
+    (SELECT sum(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true)) =
+    (SELECT sum(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := false));
+----
+true
+
+# Test: MIN consistency - DECIMAL(38,10)
+query T
+SELECT
+    (SELECT min(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true)) =
+    (SELECT min(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := false));
+----
+true
+
+# Test: MAX consistency - DECIMAL(38,10)
+query T
+SELECT
+    (SELECT max(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true)) =
+    (SELECT max(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := false));
+----
+true
+
+# Test: COUNT consistency - DECIMAL(38,10)
+query T
+SELECT
+    (SELECT count(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true)) =
+    (SELECT count(decimal_huge) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := false));
+----
+true
+
+# Test: SUM consistency - FLOAT
+query T
+SELECT
+    (SELECT sum(float_col)::BIGINT FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true)) =
+    (SELECT sum(float_col)::BIGINT FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := false));
+----
+true
+
+# Test: MIN consistency - TINYINT
+query T
+SELECT
+    (SELECT min(tiny_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true)) =
+    (SELECT min(tiny_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := false));
+----
+true
+
+# Test: MAX consistency - BIGINT
+query T
+SELECT
+    (SELECT max(big_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true)) =
+    (SELECT max(big_col) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := false));
+----
+true
+
+# =============================================================================
+# Combined Aggregations - Multiple types in one query
+# =============================================================================
+
+# Test: Multiple SUM aggregations in one query
+query IIII
+SELECT
+    sum(tiny_col),
+    sum(small_col),
+    sum(int_col),
+    sum(big_col)
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+260	2600	26000	260000
+
+# Test: Multiple MIN aggregations in one query
+query IIII
+SELECT
+    min(tiny_col),
+    min(small_col),
+    min(int_col),
+    min(big_col)
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-80	-800	-8000	-80000
+
+# Test: Multiple MAX aggregations in one query
+query IIII
+SELECT
+    max(tiny_col),
+    max(small_col),
+    max(int_col),
+    max(big_col)
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+100	1000	10000	100000
+
+# Test: Mixed aggregations (SUM, MIN, MAX, COUNT) on DECIMAL
+query RRRR
+SELECT
+    sum(decimal_small),
+    min(decimal_small),
+    max(decimal_small),
+    count(decimal_small)
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+284.90	-89.01	99.99	8

@@ -124,7 +124,38 @@ WHERE status = 'pending' AND amount > 100;
 
 -- With projection pushdown (only selected columns are fetched from server)
 SELECT name, email FROM dd_read_arrow('http://localhost:8081', source_table := 'users');
+
+-- Aggregation pushdown (aggregations are executed on the server)
+SELECT region, count(*), sum(amount)
+FROM dd_read_arrow('http://localhost:8081', source_table := 'orders')
+WHERE status = 'pending'
+GROUP BY region;
 ```
+
+#### Aggregation Pushdown
+
+The extension includes an optimizer that automatically detects aggregation queries above
+`dd_read_arrow` and rewrites them to push the aggregation to the remote server. Instead of
+fetching all rows and aggregating locally, only the aggregated result is transferred.
+
+Supported aggregations:
+
+| Aggregate | Non-split mode | Split mode |
+|-----------|:-:|:-:|
+| `COUNT(*)` | Yes | Yes |
+| `COUNT(col)` | Yes | Yes |
+| `SUM(col)` | Yes | Yes |
+| `MIN(col)` | Yes | Yes |
+| `MAX(col)` | Yes | Yes |
+| `AVG(col)` | Yes | No (local fallback) |
+| `COUNT(DISTINCT col)` | Yes | No (local fallback) |
+
+In split mode, only split-safe aggregations (those whose partial results can be merged across
+splits) are pushed down. Non-split-safe aggregations like `AVG` and `COUNT(DISTINCT ...)` fall
+back to local execution automatically.
+
+If any aggregate in a query is not supported for pushdown, the entire query falls back to local
+execution -- there is no partial pushdown.
 
 Parameters:
 - `url` (required): The base URL of the server
@@ -312,6 +343,17 @@ curl -s --retry 30 --retry-delay 2 --retry-connrefused http://localhost:8082/hea
 
 # Cleanup
 docker stop ducklake-test && docker rm ducklake-test
+```
+
+### Aggregation Pushdown Tests
+
+```bash
+# Non-split mode (requires basic server on port 8081)
+docker run -d -p 8081:8081 dazzleduck/dazzleduck:latest --conf warehouse=/data
+./build/release/test/unittest --test-dir . "*dd_read_arrow_aggregation_pushdown.test_slow*"
+
+# Split mode (requires DuckLake server on port 8082, see split mode setup above)
+./build/release/test/unittest --test-dir . "*aggregation_pushdown_split*"
 ```
 
 ## Debugging

@@ -1,0 +1,386 @@
+# name: test/sql/dd_read_arrow_aggregation_pushdown.test_slow
+# description: Integration test for dd_read_arrow aggregation pushdown optimizer
+# group: [sql]
+#
+# This test requires a running dazzleduck server:
+#   docker run -ti -p 59307:59307 -p 8081:8081 dazzleduck/dazzleduck:latest --conf warehouse=/data
+#
+# Run this test with: ./build/release/test/unittest --test-dir . "*dd_read_arrow_aggregation_pushdown*"
+
+require dazzleduck
+
+set ignore_error_messages
+
+# =============================================================================
+# Setup: define a helper table with known data via VALUES
+# =============================================================================
+
+# Helper SQL used throughout tests - a 5-row table with region, status, amount columns
+# region: 'east','east','west','west','north'
+# status: 'pending','done','pending','done','pending'
+# amount: 10, 20, 30, 40, 50
+
+# =============================================================================
+# Simple Aggregation Pushdown (non-split mode)
+# =============================================================================
+
+# Test: simple COUNT(*)
+query I
+SELECT count(*) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)');
+----
+5
+
+# Test: SUM pushdown
+query I
+SELECT sum(amount) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)');
+----
+150
+
+# Test: MIN/MAX pushdown
+query II
+SELECT min(amount), max(amount) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)');
+----
+10	50
+
+# Test: COUNT(col) pushdown (non-star count)
+query I
+SELECT count(region) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)');
+----
+5
+
+# =============================================================================
+# GROUP BY (local execution - not pushed down)
+# GROUP BY queries are intentionally NOT pushed down to avoid column binding
+# complexity. These tests verify correct local execution over dd_read_arrow.
+# =============================================================================
+
+# Test: GROUP BY with COUNT(*) (local execution)
+query II rowsort
+SELECT region, count(*) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)') GROUP BY region;
+----
+east	2
+north	1
+west	2
+
+# Test: GROUP BY with SUM (local execution)
+query II rowsort
+SELECT region, sum(amount) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)') GROUP BY region;
+----
+east	30
+north	50
+west	70
+
+# Test: GROUP BY with multiple aggregates (local execution)
+query IIII rowsort
+SELECT region, count(*), sum(amount), max(amount) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)') GROUP BY region;
+----
+east	2	30	20
+north	1	50	50
+west	2	70	40
+
+# =============================================================================
+# Filter + Aggregation Pushdown
+# =============================================================================
+
+# Test: WHERE + COUNT(*) (filter serialized into pushdown query)
+query I
+SELECT count(*) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)') WHERE amount > 20;
+----
+3
+
+# Test: WHERE + SUM (filter serialized into pushdown query)
+query I
+SELECT sum(amount) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)') WHERE amount >= 20;
+----
+140
+
+# Test: WHERE with string filter + COUNT(*) (string constants properly quoted)
+query I
+SELECT count(*) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)') WHERE status = 'pending';
+----
+3
+
+# Test: WHERE with string filter + SUM
+query I
+SELECT sum(amount) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)') WHERE status = 'pending';
+----
+90
+
+# Test: WHERE + GROUP BY + aggregate (GROUP BY falls back to local, filter handled normally)
+query II rowsort
+SELECT region, sum(amount) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)') WHERE amount >= 20 GROUP BY region;
+----
+east	20
+north	50
+west	70
+
+# =============================================================================
+# AVG Pushdown (non-split mode only)
+# =============================================================================
+
+# Test: AVG should be pushed down in non-split mode and return correct result
+query I
+SELECT avg(amount) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (10), (20), (30), (40), (50)) AS t(amount)');
+----
+30.0
+
+# =============================================================================
+# COUNT DISTINCT (non-split mode only)
+# =============================================================================
+
+# Test: COUNT DISTINCT should be pushed down in non-split mode and return correct result
+query I
+SELECT count(DISTINCT region) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east''), (''east''), (''west''), (''west''), (''north'')) AS t(region)');
+----
+3
+
+# =============================================================================
+# Correctness Verification: aggregation results match local execution
+# =============================================================================
+
+# Verify COUNT(*) matches local
+query T
+SELECT (SELECT count(*) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1),(2),(3),(4),(5)) AS t(id)')) = 5;
+----
+true
+
+# Verify SUM matches local
+query T
+SELECT (SELECT sum(id) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1),(2),(3),(4),(5)) AS t(id)')) = 15;
+----
+true
+
+# Verify MIN/MAX matches local
+query T
+SELECT (SELECT min(id) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1),(2),(3),(4),(5)) AS t(id)')) = 1
+   AND (SELECT max(id) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1),(2),(3),(4),(5)) AS t(id)')) = 5;
+----
+true
+
+# =============================================================================
+# Edge Cases
+# =============================================================================
+
+# Test: aggregation with source_table parameter
+query I
+SELECT count(*) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT 1 as a UNION ALL SELECT 2 UNION ALL SELECT 3');
+----
+3
+
+# Test: multiple GROUP BY columns
+query III rowsort
+SELECT region, status, count(*) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''east'', ''pending'', 10), (''east'', ''done'', 20), (''west'', ''pending'', 30), (''west'', ''done'', 40), (''north'', ''pending'', 50)) AS t(region, status, amount)') GROUP BY region, status;
+----
+east	done	1
+east	pending	1
+north	pending	1
+west	done	1
+west	pending	1
+
+# =============================================================================
+# SUM across all numeric data types
+# =============================================================================
+
+# Test: SUM of INTEGER (returns HUGEINT internally, Arrow sends Decimal128)
+query I
+SELECT sum(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (10), (20), (30)) AS t(x)');
+----
+60
+
+# Test: SUM of BIGINT (returns HUGEINT)
+query I
+SELECT sum(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS BIGINT) as x FROM (VALUES (1000000000), (2000000000), (3000000000)) AS t(v)');
+----
+6000000000
+
+# Test: SUM of SMALLINT (returns HUGEINT)
+query I
+SELECT sum(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS SMALLINT) as x FROM (VALUES (100), (200), (300)) AS t(v)');
+----
+600
+
+# Test: SUM of TINYINT (returns HUGEINT)
+query I
+SELECT sum(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS TINYINT) as x FROM (VALUES (10), (20), (30)) AS t(v)');
+----
+60
+
+# Test: SUM of FLOAT (returns DOUBLE)
+query I
+SELECT sum(x)::INTEGER FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS FLOAT) as x FROM (VALUES (1.5), (2.5), (3.0)) AS t(v)');
+----
+7
+
+# Test: SUM of DOUBLE (returns DOUBLE)
+query I
+SELECT sum(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS DOUBLE) as x FROM (VALUES (1.5), (2.5), (3.0)) AS t(v)');
+----
+7.0
+
+# Test: SUM of DECIMAL(10,2) (returns DECIMAL(38,2))
+query I
+SELECT sum(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS DECIMAL(10,2)) as x FROM (VALUES (10.50), (20.25), (30.75)) AS t(v)');
+----
+61.50
+
+# Test: SUM of DECIMAL(18,4) (returns DECIMAL(38,4))
+query I
+SELECT sum(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS DECIMAL(18,4)) as x FROM (VALUES (100.1234), (200.5678), (300.9012)) AS t(v)');
+----
+601.5924
+
+# =============================================================================
+# MIN/MAX across all numeric data types
+# =============================================================================
+
+# Test: MIN/MAX of INTEGER
+query II
+SELECT min(x), max(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (10), (20), (30)) AS t(x)');
+----
+10	30
+
+# Test: MIN/MAX of BIGINT
+query II
+SELECT min(x), max(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS BIGINT) as x FROM (VALUES (1000000000), (2000000000), (3000000000)) AS t(v)');
+----
+1000000000	3000000000
+
+# Test: MIN/MAX of SMALLINT
+query II
+SELECT min(x), max(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS SMALLINT) as x FROM (VALUES (100), (200), (300)) AS t(v)');
+----
+100	300
+
+# Test: MIN/MAX of TINYINT
+query II
+SELECT min(x), max(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS TINYINT) as x FROM (VALUES (10), (20), (30)) AS t(v)');
+----
+10	30
+
+# Test: MIN/MAX of FLOAT
+query II
+SELECT min(x), max(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS FLOAT) as x FROM (VALUES (1.5), (2.5), (3.0)) AS t(v)');
+----
+1.5	3.0
+
+# Test: MIN/MAX of DOUBLE
+query II
+SELECT min(x), max(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS DOUBLE) as x FROM (VALUES (1.5), (2.5), (3.0)) AS t(v)');
+----
+1.5	3.0
+
+# Test: MIN/MAX of DECIMAL(10,2)
+query II
+SELECT min(x), max(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT CAST(v AS DECIMAL(10,2)) as x FROM (VALUES (10.50), (20.25), (30.75)) AS t(v)');
+----
+10.50	30.75
+
+# Test: MIN/MAX of VARCHAR
+query II
+SELECT min(x), max(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (''apple''), (''banana''), (''cherry'')) AS t(x)');
+----
+apple	cherry
+
+# =============================================================================
+# All data types with typed columns (using server-side SQL with explicit types)
+# =============================================================================
+# Use a server-side SQL query that produces properly typed columns via a CTE,
+# simulating a real table with typed columns.
+
+# Test: SUM of all integer types (TINYINT, SMALLINT, INTEGER, BIGINT all return HUGEINT)
+query IIII
+SELECT sum(col_tinyint), sum(col_smallint), sum(col_int), sum(col_bigint) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT col_tinyint::TINYINT as col_tinyint, col_smallint::SMALLINT as col_smallint, col_int::INTEGER as col_int, col_bigint::BIGINT as col_bigint FROM (VALUES (1, 100, 1000, 1000000), (2, 200, 2000, 2000000), (3, 300, 3000, 3000000)) AS t(col_tinyint, col_smallint, col_int, col_bigint)');
+----
+6	600	6000	6000000
+
+# Test: SUM of FLOAT and DOUBLE (both return DOUBLE)
+query II
+SELECT sum(col_float)::INTEGER, sum(col_double) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT col_float::FLOAT as col_float, col_double::DOUBLE as col_double FROM (VALUES (1.5, 2.5), (2.5, 3.5), (3.5, 4.5)) AS t(col_float, col_double)');
+----
+8	10.5
+
+# Test: SUM of DECIMAL (returns DECIMAL(38,2))
+query I
+SELECT sum(col_decimal) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT col_decimal::DECIMAL(10,2) as col_decimal FROM (VALUES (10.50), (20.25), (30.75)) AS t(col_decimal)');
+----
+61.50
+
+# Test: MIN/MAX of all types in a single query
+query IIIIIIIIIIIIIIII
+SELECT min(col_tinyint), max(col_tinyint), min(col_smallint), max(col_smallint), min(col_int), max(col_int), min(col_bigint), max(col_bigint), min(col_float), max(col_float), min(col_double), max(col_double), min(col_decimal), max(col_decimal), min(col_varchar), max(col_varchar) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT col_tinyint::TINYINT as col_tinyint, col_smallint::SMALLINT as col_smallint, col_int::INTEGER as col_int, col_bigint::BIGINT as col_bigint, col_float::FLOAT as col_float, col_double::DOUBLE as col_double, col_decimal::DECIMAL(10,2) as col_decimal, col_varchar::VARCHAR as col_varchar FROM (VALUES (1, 100, 1000, 1000000, 1.5, 2.5, 10.50, ''foo''), (2, 200, 2000, 2000000, 2.5, 3.5, 20.25, ''hello''), (3, 300, 3000, 3000000, 3.5, 4.5, 30.75, ''world'')) AS t(col_tinyint, col_smallint, col_int, col_bigint, col_float, col_double, col_decimal, col_varchar)');
+----
+1	3	100	300	1000	3000	1000000	3000000	1.5	3.5	2.5	4.5	10.50	30.75	foo	world
+
+# Test: AVG of integer and double types
+query II
+SELECT avg(col_int), avg(col_double) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT col_int::INTEGER as col_int, col_double::DOUBLE as col_double FROM (VALUES (1000, 2.5), (2000, 3.5), (3000, 4.5)) AS t(col_int, col_double)');
+----
+2000.0	3.5
+
+# =============================================================================
+# NULL handling
+# =============================================================================
+
+# Test: SUM with NULLs (NULLs are ignored by SUM)
+query I
+SELECT sum(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT x FROM (VALUES (10), (NULL), (30), (NULL), (50)) AS t(x)');
+----
+90
+
+# Test: COUNT(*) with NULLs (counts all rows)
+query I
+SELECT count(*) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT x FROM (VALUES (10), (NULL), (30), (NULL), (50)) AS t(x)');
+----
+5
+
+# Test: COUNT(col) with NULLs (counts non-NULL values only)
+query I
+SELECT count(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT x FROM (VALUES (10), (NULL), (30), (NULL), (50)) AS t(x)');
+----
+3
+
+# Test: MIN/MAX with NULLs
+query II
+SELECT min(x), max(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT x FROM (VALUES (10), (NULL), (30), (NULL), (50)) AS t(x)');
+----
+10	50
+
+# Test: AVG with NULLs (NULLs are ignored)
+query I
+SELECT avg(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT x FROM (VALUES (10), (NULL), (30), (NULL), (50)) AS t(x)');
+----
+30.0
+
+# Test: SUM of all NULLs returns NULL
+query I
+SELECT sum(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT x::INTEGER as x FROM (VALUES (NULL), (NULL), (NULL)) AS t(x)');
+----
+NULL
+
+# Test: MIN of all NULLs returns NULL
+query I
+SELECT min(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT x::INTEGER as x FROM (VALUES (NULL), (NULL), (NULL)) AS t(x)');
+----
+NULL
+
+# =============================================================================
+# Empty result sets
+# =============================================================================
+
+# Test: COUNT(*) on empty result returns 0
+query I
+SELECT count(*) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1), (2), (3)) AS t(x) WHERE x > 100');
+----
+0
+
+# Test: SUM on empty result returns NULL
+query I
+SELECT sum(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1), (2), (3)) AS t(x) WHERE x > 100');
+----
+NULL
+
+# Test: MIN/MAX on empty result returns NULL
+query II
+SELECT min(x), max(x) FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT * FROM (VALUES (1), (2), (3)) AS t(x) WHERE x > 100');
+----
+NULL	NULL

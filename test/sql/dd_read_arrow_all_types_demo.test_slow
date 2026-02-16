@@ -1,0 +1,103 @@
+# name: test/sql/dd_read_arrow_all_types_demo.test_slow
+# description: Demo test for all_types table with comprehensive numeric type aggregations
+# group: [sql]
+# This test requires a running dazzleduck server on localhost:8082 with demo_db.main.all_types table
+
+require dazzleduck
+
+# =============================================================================
+# Comprehensive All Types Table Aggregation Tests
+# Tests aggregations (SUM, COUNT, MIN, MAX, AVG) on all numeric data types
+# =============================================================================
+
+# Test: Count all rows (should be 10)
+query I
+SELECT count(*) FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+10
+
+# Test: SUM aggregations on all integer types
+query IIII
+SELECT
+    sum(tiny_col) as sum_tiny,
+    sum(small_col) as sum_small,
+    sum(int_col) as sum_int,
+    sum(big_col) as sum_big
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+260	2600	26000	260000
+
+# Test: SUM on floating point types (rounded for comparison)
+query II
+SELECT
+    sum(float_col)::BIGINT as sum_float_rounded,
+    sum(double_col)::BIGINT as sum_double_rounded
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+29	263
+
+# Test: SUM on DECIMAL types with different precisions
+query RRRR
+SELECT
+    sum(decimal_small) as sum_dec_small,
+    sum(decimal_medium) as sum_dec_medium,
+    sum(decimal_large) as sum_dec_large,
+    sum(decimal_huge) as sum_dec_huge
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+284.90	2849.380	28493.8380	284938382.7284938380
+
+# Test: MIN/MAX on TINYINT
+query II
+SELECT
+    min(tiny_col) as min_tiny,
+    max(tiny_col) as max_tiny
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-80	100
+
+# Test: MIN/MAX on BIGINT
+query II
+SELECT
+    min(big_col) as min_big,
+    max(big_col) as max_big
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+-80000	100000
+
+# Test: COUNT with NULLs (should count non-NULL values only)
+query III
+SELECT
+    count(tiny_col) as count_tiny,
+    count(int_col) as count_int,
+    count(decimal_huge) as count_decimal
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true);
+----
+8	8	8
+
+# Test: Aggregation with partition filter
+query I
+SELECT sum(int_col)
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true)
+WHERE partition = 0;
+----
+11000
+
+# Test: Aggregation with partition filter on partition 1
+query I
+SELECT sum(int_col)
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := true)
+WHERE partition = 1;
+----
+15000
+
+# Test: Multiple aggregations with GROUP BY partition (executed locally, not pushed down)
+# Note: Using split := false because GROUP BY with split mode requires split-aware aggregation
+query III
+SELECT partition, count(*) as cnt, sum(int_col) as total
+FROM dd_read_arrow('http://localhost:8082', source_table := 'demo_db.main.all_types', split := false)
+GROUP BY partition
+ORDER BY partition;
+----
+0	5	11000
+1	5	15000

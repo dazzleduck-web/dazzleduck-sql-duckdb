@@ -1,0 +1,28 @@
+# name: test/sql/dd_read_arrow_aggregation_pushdown.test
+# description: test aggregation pushdown optimizer registration for dd_read_arrow
+# group: [sql]
+
+# Require statement will ensure this test is run with this extension loaded
+require dazzleduck
+
+# Test: extension loads with optimizer registered
+statement ok
+SELECT dd_version();
+
+# Test: basic dd_read_arrow parameter validation still works after optimizer registration
+statement error
+SELECT * FROM dd_read_arrow('http://localhost:8081');
+----
+dd_read_arrow requires either 'source_table' or 'sql' parameter
+
+# Test: both source_table and sql still rejected
+statement error
+SELECT * FROM dd_read_arrow('http://localhost:8081', source_table := 'test', sql := 'SELECT 1');
+----
+dd_read_arrow accepts either 'source_table' or 'sql' parameter, not both
+
+# Test: invalid named parameter still rejected
+statement error
+SELECT * FROM dd_read_arrow('http://localhost:8081', sql := 'SELECT 1', invalid_param := 'test');
+----
+Invalid named parameter "invalid_param" for function dd_read_arrow

@@ -6,7 +6,7 @@
 set -e
 
 CONTAINER_NAME="ducklake-test"
-IMAGE="dazzleduck/dazzleduck:0.0.17"
+IMAGE="dazzleduck/dazzleduck:latest"
 HTTP_PORT=8082
 FLIGHT_PORT=59308
 MAX_WAIT_SECONDS=60
@@ -43,23 +43,25 @@ echo -e "${YELLOW}Stopping any existing split test container...${NC}"
 docker stop "$CONTAINER_NAME" 2>/dev/null || true
 docker rm "$CONTAINER_NAME" 2>/dev/null || true
 
-# Start the DuckLake container with restricted access mode
-echo -e "${YELLOW}Starting DuckLake container on port $HTTP_PORT...${NC}"
+# Start the DuckLake container with startup script
+echo -e "${YELLOW}Starting DuckLake container on port $HTTP_PORT with startup script...${NC}"
 docker run -d \
     --name "$CONTAINER_NAME" \
     -p "$HTTP_PORT:8081" \
     -p "$FLIGHT_PORT:59307" \
     "$IMAGE" \
-    --conf 'dazzleduck_server.access_mode=RESTRICTED' \
-    --conf 'dazzleduck_server.startup_script_provider.script_location="/startup/ducklake.sql"'
+    --conf dazzleduck_server.warehouse=/data \
+    --conf dazzleduck_server.startup_script_provider.script_location=/startup/ducklake.sql \
+    --conf dazzleduck_server.access_mode=RESTRICTED
 
-# Wait for the server to be ready
-echo -e "${YELLOW}Waiting for DuckLake server to be ready...${NC}"
+# Wait for the server to be ready (give extra time for startup script execution)
+echo -e "${YELLOW}Waiting for DuckLake server to be ready and startup script to execute...${NC}"
 WAIT_COUNT=0
-while [ $WAIT_COUNT -lt $MAX_WAIT_SECONDS ]; do
-    # Try to connect to the HTTP endpoint
-    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$HTTP_PORT/health" 2>/dev/null | grep -q "200"; then
-        echo -e "${GREEN}DuckLake server is ready!${NC}"
+MAX_STARTUP_WAIT=$((MAX_WAIT_SECONDS + 30))  # Extra time for startup script
+while [ $WAIT_COUNT -lt $MAX_STARTUP_WAIT ]; do
+    # Try to query the demo table to confirm both server is ready AND startup script executed
+    if curl -s "http://localhost:$HTTP_PORT/health" 2>/dev/null | strings | grep -q "UP"; then
+        echo -e "${GREEN}DuckLake server is ready and database initialized!${NC}"
         break
     fi
 
@@ -70,26 +72,39 @@ while [ $WAIT_COUNT -lt $MAX_WAIT_SECONDS ]; do
         exit 1
     fi
 
-    sleep 1
-    WAIT_COUNT=$((WAIT_COUNT + 1))
+    sleep 2
+    WAIT_COUNT=$((WAIT_COUNT + 2))
     echo -n "."
 done
 
-if [ $WAIT_COUNT -ge $MAX_WAIT_SECONDS ]; then
-    echo -e "${RED}Error: DuckLake server did not become ready within $MAX_WAIT_SECONDS seconds${NC}"
+if [ $WAIT_COUNT -ge $MAX_STARTUP_WAIT ]; then
+    echo -e "${RED}Error: DuckLake server did not initialize within $MAX_STARTUP_WAIT seconds${NC}"
+    echo -e "${YELLOW}Server logs:${NC}"
     docker logs "$CONTAINER_NAME"
     exit 1
 fi
 
 # Run the split mode tests
 echo -e "${YELLOW}Running split mode tests...${NC}"
-./build/release/test/unittest --test-dir . "*dd_read_arrow_split*"
-TEST_RESULT=$?
 
-if [ $TEST_RESULT -eq 0 ]; then
+TOTAL_FAILED=0
+
+# Run each test file separately
+for TEST_FILE in test/sql/dd_read_arrow_split.test_slow \
+                 test/sql/dd_read_arrow_aggregation_pushdown_split.test_slow \
+                 test/sql/dd_read_arrow_all_types_demo.test_slow \
+                 test/sql/dd_read_arrow_all_types_split_comprehensive.test_slow; do
+    echo -e "${YELLOW}Running $(basename $TEST_FILE)...${NC}"
+    ./build/release/test/unittest "$TEST_FILE"
+    if [ $? -ne 0 ]; then
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+done
+
+if [ $TOTAL_FAILED -eq 0 ]; then
     echo -e "${GREEN}All split mode tests passed!${NC}"
+    exit 0
 else
-    echo -e "${RED}Some split tests failed${NC}"
+    echo -e "${RED}$TOTAL_FAILED test file(s) failed${NC}"
+    exit 1
 fi
-
-exit $TEST_RESULT

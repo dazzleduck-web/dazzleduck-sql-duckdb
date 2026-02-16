@@ -7,6 +7,7 @@
 
 #include "nanoarrow/nanoarrow.hpp"
 
+#include "optimizer/aggregation_pushdown.hpp"
 #include "scalar_function/array_contains_all.hpp"
 #include "scalar_function/bloom_filter.hpp"
 #include "scalar_function/dd_login.hpp"
@@ -42,6 +43,7 @@ void LoadInternal(ExtensionLoader& loader) {
   ext_nanoarrow::RegisterDDSearch(loader);
   ext_nanoarrow::RegisterDDSplits(loader);
   ext_nanoarrow::RegisterReadArrowDD(loader);
+  ext_nanoarrow::RegisterAggregationPushdown(loader);
 }
 
 }  // namespace
