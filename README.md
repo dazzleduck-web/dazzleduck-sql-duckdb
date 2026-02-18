@@ -2,7 +2,14 @@
 
 This extension provides functionality to query remote Arrow IPC endpoints.
 
-## Features
+## Key Features
+
+- **Filter Pushdown**: Filters are automatically sent to the remote server, reducing data transfer
+- **Projection Pushdown**: Only selected columns are fetched from the server
+- **Aggregation Pushdown**: Aggregations are executed on the remote server, minimizing data transfer
+- **Query Splitting**: Parallel execution mode for improved performance on large datasets
+
+## Functions
 
 - **dd_read_arrow**: Query remote servers that return Arrow IPC streams with parallel execution support
 - **dd_login**: Authenticate with remote servers and obtain JWT tokens
@@ -15,7 +22,7 @@ This extension provides functionality to query remote Arrow IPC endpoints.
 
 ## Installation
 
-### From Community Extensions
+The DazzleDuck extension is available in the DuckDB community extensions repository:
 
 ```sql
 INSTALL dazzleduck FROM community;
