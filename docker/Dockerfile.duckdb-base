@@ -1,9 +1,9 @@
-# Base image with DuckDB v1.4.3 pre-built
-# Build once: docker build -t duckdb-builder:v1.4.3 -f docker/Dockerfile.duckdb-base .
+# Base image with DuckDB pre-built
+# Build once: docker build --build-arg DUCKDB_VERSION=v1.4.4 -t duckdb-builder:v1.4.4 -f docker/Dockerfile.duckdb-base .
 #
 FROM ubuntu:22.04
 
-ARG DUCKDB_VERSION=v1.4.3
+ARG DUCKDB_VERSION=v1.4.4
 
 # Install build tools
 RUN apt-get update && apt-get install -y \

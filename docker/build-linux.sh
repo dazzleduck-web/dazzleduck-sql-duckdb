@@ -12,7 +12,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 PLATFORM="linux/amd64"
-DUCKDB_VERSION="v1.4.3"
+DUCKDB_VERSION="v1.4.4"
 BASE_IMAGE="duckdb-builder:${DUCKDB_VERSION}"
 EXT_IMAGE="dazzle-duck-extension"
 
@@ -39,10 +39,10 @@ build_extension() {
     echo "Extension image built: $EXT_IMAGE"
 
     # Extract the extension
-    mkdir -p dist/v1.4.3
-    docker run --rm --platform "$PLATFORM" "$EXT_IMAGE" > dist/v1.4.3/dazzleduck.linux_amd64.duckdb_extension
-    echo "Extension extracted to: dist/v1.4.3/dazzleduck.linux_amd64.duckdb_extension"
-    ls -lh dist/v1.4.3/dazzleduck.linux_amd64.duckdb_extension
+    mkdir -p dist/${DUCKDB_VERSION}
+    docker run --rm --platform "$PLATFORM" "$EXT_IMAGE" > dist/${DUCKDB_VERSION}/dazzleduck.linux_amd64.duckdb_extension
+    echo "Extension extracted to: dist/${DUCKDB_VERSION}/dazzleduck.linux_amd64.duckdb_extension"
+    ls -lh dist/${DUCKDB_VERSION}/dazzleduck.linux_amd64.duckdb_extension
 }
 
 case "${1:-}" in

@@ -1,9 +1,10 @@
 # Extension build image - uses pre-built DuckDB base
 # Build: docker build -t dazzle-duck-extension -f docker/Dockerfile.extension .
 #
-# Requires: duckdb-builder:v1.4.3 base image
+# Requires: duckdb-builder:v1.4.4 base image
 #
-FROM duckdb-builder:v1.4.3
+ARG DUCKDB_VERSION=v1.4.4
+FROM duckdb-builder:${DUCKDB_VERSION}
 
 WORKDIR /build
 
